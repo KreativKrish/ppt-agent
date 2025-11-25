@@ -1,0 +1,521 @@
+"use client";
+
+import React, { useState } from "react";
+import { Input, TextArea } from "./ParamGroup";
+import { Loader2, CheckCircle, XCircle, ExternalLink } from "lucide-react";
+
+interface AutomationResult {
+    unit: string;
+    parts?: Array<{
+        part: number;
+        url?: string;
+        status: string;
+    }>;
+    status: string;
+    error?: string;
+}
+
+const DEFAULT_PROMPT = `Please create a comprehensive and detailed set of presentation slides for the university course unit titled {unitName}.
+Generate a {slideCount}-slide presentation outline with:
+Unit: {unitName}
+Topics (Level-1): {level1Topics}
+Subtopics (Level-2): {level2Topics}
+SubSubTopics (Level-3): {level3Topics}
+
+Sole Source for Topics: Use the provided level-1, level-2, and level-3 topics as the one and only source for this task.
+Content Generation Instructions:
+• Internal Knowledge: You must generate all detailed content for the slides using your own internal, general knowledge of the subject matter. No Self-Learning Material (SLM) or other external document is provided.
+• Comprehensive Coverage: For each major heading in the TOC (e.g., "3.1," "3.2"), create a series of slides that thoroughly explain all the sub-topics listed under it. Ensure the explanations are accurate and at a university level.
+• Enhancements: It is essential that you enhance the content with relevant examples, clear analogies, simple tables, mathematical formulas, or code snippets to illustrate and clarify complex concepts.
+Structural Requirements:
+1. Slide Distribution: Distribute these slides evenly across the major sections from the {unitName}.    
+2. No Summaries: Do not create a summary slide at the end of each major section (e.g., at the end of 3.1, 3.2, etc.).
+
+STRICT FORMATTING REQUIREMENTS (MANDATORY - DO NOT SKIP):
+1. Slide Format: Every slide MUST be formatted EXACTLY as follows:
+   - A heading line with a continuous slide number and a descriptive title (e.g., **Slide 1: [Topic]**).
+   - EXACTLY THREE (3) bullet points - THIS IS MANDATORY, NOT OPTIONAL
+   - Each bullet point MUST begin with a bolded keyword or phrase, followed by a colon, then explanatory text
+   - The text after the colon must be a single, concise explanatory sentence.
+
+EXAMPLE FORMAT (follow this exactly):
+Slide 1: Introduction to Economic Systems
+**Market Economy**: A system where prices are determined by supply and demand with minimal government intervention.
+**Command Economy**: An economic system where the government controls production, prices, and distribution of goods.
+**Mixed Economy**: A system that combines elements of both market and command economies for balanced growth.
+
+---
+
+2. Separators: Use a horizontal line (---) to separate each slide.
+3. No Citations: Absolutely no citations (e.g., ) are allowed in the response.
+
+IMPORTANT: Each slide MUST have exactly 3 bullet points. Do not create slides with only titles. Every slide needs content.`;
+
+const DEFAULT_GAMMA_ADDITIONAL_INSTRUCTIONS = `1)all title - in heading 2 font size
+2)All conetnt except for Title - Large font size
+3)only below layouts in[  oriantion -vertical column size - Extra Large]
+-->solid box (No image)    
+--> side box(No image)
+-->Bullets list (No image)  
+--->hollw box (No image),   
+--->Arrows(No image) 
+--->two column(left image , text right in bullets )  
+in loop , No other layput
+In all cards keep layput oriantaion -  Vertical -column size - exrta large=25`;
+
+export default function AutomationPanel() {
+    const [googleTokens, setGoogleTokens] = useState<string | null>(null);
+    const [driveFileId, setDriveFileId] = useState("");
+    const [driveFolderId, setDriveFolderId] = useState("");
+    const [gammaFolderId, setGammaFolderId] = useState("");
+    const [gammaAdditionalInstructions, setGammaAdditionalInstructions] = useState(DEFAULT_GAMMA_ADDITIONAL_INSTRUCTIONS);
+    const [slidesPerUnit, setSlidesPerUnit] = useState(10);
+    const [geminiApiKey, setGeminiApiKey] = useState("");
+    const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
+
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
+    const [isRunning, setIsRunning] = useState(false);
+    const [progress, setProgress] = useState("");
+    const [results, setResults] = useState<AutomationResult[]>([]);
+    const [error, setError] = useState("");
+
+    // Load results from localStorage on mount
+    React.useEffect(() => {
+        const savedResults = localStorage.getItem('automation_results');
+        if (savedResults) {
+            try {
+                setResults(JSON.parse(savedResults));
+            } catch (e) {
+                console.error('Failed to load saved results:', e);
+            }
+        }
+    }, []);
+
+    // Save results to localStorage whenever they change
+    React.useEffect(() => {
+        if (results.length > 0) {
+            localStorage.setItem('automation_results', JSON.stringify(results));
+        }
+    }, [results]);
+
+    const handleGoogleAuth = async () => {
+        setIsAuthenticating(true);
+        try {
+            const response = await fetch("/api/auth/google");
+            const data = await response.json();
+
+            if (data.authUrl) {
+                // Open auth URL in new window
+                window.open(data.authUrl, "_blank");
+                setProgress("Please complete authentication in the new window...");
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsAuthenticating(false);
+        }
+    };
+
+    const saveGeminiKey = async () => {
+        if (!geminiApiKey) return;
+        try {
+            const response = await fetch("/api/save-key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ apiKey: geminiApiKey }),
+            });
+            if (response.ok) {
+                alert("Gemini API Key saved to .env.local!");
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const startAutomation = async () => {
+        if (!driveFileId || !customPrompt) {
+            setError("Please fill in all required fields");
+            return;
+        }
+
+        if (!googleTokens) {
+            setError("Please authenticate with Google Drive first");
+            return;
+        }
+
+        setIsRunning(true);
+        setError("");
+        setResults([]);
+        setProgress("Starting automation...");
+
+        try {
+            const response = await fetch("/api/automate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    driveFileId,
+                    driveFolderId,
+                    gammaFolderId,
+                    gammaAdditionalInstructions,
+                    slidesPerUnit,
+                    googleTokens: JSON.parse(googleTokens),
+                    geminiApiKey,
+                    customPrompt,
+                }),
+            });
+
+            if (!response.ok || !response.body) {
+                throw new Error("Failed to start automation");
+            }
+
+            // Read streaming response
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            const resultsMap = new Map<string, any>();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+
+                            switch (data.type) {
+                                case 'progress':
+                                    setProgress(data.message);
+                                    break;
+
+                                case 'part_complete':
+                                    // Add or update unit in results
+                                    const existing = resultsMap.get(data.unit);
+                                    if (existing) {
+                                        existing.parts.push(data.part);
+                                    } else {
+                                        resultsMap.set(data.unit, {
+                                            unit: data.unit,
+                                            status: 'in_progress',
+                                            parts: [data.part]
+                                        });
+                                    }
+                                    // Update results array immediately
+                                    setResults(Array.from(resultsMap.values()));
+                                    break;
+
+                                case 'unit_complete':
+                                    resultsMap.set(data.unit, {
+                                        unit: data.unit,
+                                        status: data.status,
+                                        parts: data.parts
+                                    });
+                                    setResults(Array.from(resultsMap.values()));
+                                    break;
+
+                                case 'unit_error':
+                                    resultsMap.set(data.unit, {
+                                        unit: data.unit,
+                                        status: 'error',
+                                        error: data.error
+                                    });
+                                    setResults(Array.from(resultsMap.values()));
+                                    break;
+
+                                case 'complete':
+                                    setProgress(data.message);
+                                    break;
+
+                                case 'error':
+                                    setError(data.message);
+                                    break;
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse streaming data:', e);
+                        }
+                    }
+                }
+            }
+
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsRunning(false);
+        }
+    };
+
+    // Check for auth callback
+    React.useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const authStatus = params.get("auth");
+        const tokens = params.get("tokens");
+
+        if (authStatus === "success" && tokens) {
+            setGoogleTokens(decodeURIComponent(tokens));
+            setProgress("Google Drive authenticated successfully!");
+            // Clean up URL
+            window.history.replaceState({}, "", window.location.pathname);
+        } else if (authStatus === "error") {
+            const message = params.get("message");
+            setError(`Authentication failed: ${message}`);
+            window.history.replaceState({}, "", window.location.pathname);
+        }
+    }, []);
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Automated ToC-to-PPT Pipeline</h2>
+                <p className="text-sm text-gray-600 mb-6">
+                    Upload an Excel ToC to Google Drive, and this tool will automatically generate presentations for each unit.
+                </p>
+
+                {/* Google Drive Auth */}
+                <div className="mb-6">
+                    <label className="text-sm font-bold text-gray-800 block mb-2">Google Drive Authentication</label>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={handleGoogleAuth}
+                            disabled={isAuthenticating || !!googleTokens}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                            {isAuthenticating ? (
+                                <>
+                                    <Loader2 className="animate-spin inline mr-2 h-4 w-4" />
+                                    Authenticating...
+                                </>
+                            ) : googleTokens ? (
+                                <>
+                                    <CheckCircle className="inline mr-2 h-4 w-4" />
+                                    Authenticated
+                                </>
+                            ) : (
+                                "Connect Google Drive"
+                            )}
+                        </button>
+                        {googleTokens && (
+                            <span className="text-sm text-green-600">✓ Ready to access Drive</span>
+                        )}
+                    </div>
+                </div>
+
+                {/* File IDs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <Input
+                            label="Excel ToC File ID"
+                            name="driveFileId"
+                            placeholder="Get from Drive URL: /file/d/FILE_ID/view"
+                            value={driveFileId}
+                            onChange={(e) => setDriveFileId(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Open file in Drive, copy ID from URL
+                        </p>
+                    </div>
+                    <div>
+                        <Input
+                            label="Google Drive Folder ID (Optional - not used currently)"
+                            name="driveFolderId"
+                            placeholder="e.g. 1a2b3c..."
+                            value={driveFolderId}
+                            onChange={(e) => setDriveFolderId(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Not required - presentations will be accessible via Gamma links
+                        </p>
+                        <Input
+                            label="Gamma Folder ID (Optional)"
+                            name="gammaFolderId"
+                            placeholder="e.g. 8a9b0c..."
+                            value={gammaFolderId}
+                            onChange={(e) => setGammaFolderId(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Organize presentations in a specific Gamma folder
+                        </p>
+                    </div>
+                    <div>
+                        <Input
+                            label="Slides per Unit"
+                            name="slidesPerUnit"
+                            type="number"
+                            placeholder="e.g. 10, 60, 120"
+                            value={slidesPerUnit.toString()}
+                            onChange={(e) => setSlidesPerUnit(parseInt(e.target.value) || 10)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Number of slides Gemini will generate for each unit
+                        </p>
+                    </div>
+                </div>
+
+                {/* Gamma Additional Instructions */}
+                <div className="mb-6">
+                    <TextArea
+                        label="Gamma Additional Instructions (Optional)"
+                        name="gammaAdditionalInstructions"
+                        placeholder="e.g., Make the card headings humorous and catchy, Use vibrant colors, etc."
+                        value={gammaAdditionalInstructions}
+                        onChange={(e) => setGammaAdditionalInstructions(e.target.value)}
+                        rows={3}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Add specifications to steer Gamma's content, layouts, and design. See{" "}
+                        <a
+                            href="https://developers.gamma.app/docs/generate-api-parameters-explained#additionalinstructions-optional"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-600 hover:underline"
+                        >
+                            Gamma docs
+                        </a>
+                        {" "}for examples.
+                    </p>
+                </div>
+
+                {/* Gemini API Key */}
+                <div className="mb-6">
+                    <div className="flex items-end gap-4">
+                        <div className="flex-1">
+                            <Input
+                                label="Gemini API Key (Optional)"
+                                name="geminiApiKey"
+                                type="password"
+                                placeholder="Leave empty if saved in .env"
+                                value={geminiApiKey}
+                                onChange={(e) => setGeminiApiKey(e.target.value)}
+                            />
+                        </div>
+                        <button
+                            onClick={saveGeminiKey}
+                            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 text-sm font-medium h-10 mb-0.5"
+                        >
+                            Save to Env
+                        </button>
+                    </div>
+                </div>
+
+                {/* Custom Prompt */}
+                <div className="mb-6">
+                    <TextArea
+                        label="Outline Generation Prompt"
+                        name="customPrompt"
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        className="min-h-[200px] font-mono text-xs"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Use placeholders: {"{unitName}"}, {"{level1Topics}"}, {"{level2Topics}"}, {"{slideCount}"}
+                    </p>
+                </div>
+
+                {/* Start Button */}
+                <button
+                    onClick={startAutomation}
+                    disabled={isRunning || !googleTokens}
+                    className="w-full px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-base"
+                >
+                    {isRunning ? (
+                        <>
+                            <Loader2 className="animate-spin inline mr-2 h-5 w-5" />
+                            Processing...
+                        </>
+                    ) : (
+                        "Start Automation"
+                    )}
+                </button>
+
+                {/* Progress */}
+                {progress && (
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                        {progress}
+                    </div>
+                )}
+
+                {/* Error */}
+                {error && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                        <strong>Error:</strong> {error}
+                    </div>
+                )}
+            </div>
+
+            {/* Results */}
+            {results.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-bold text-gray-900">Results</h3>
+                        <button
+                            onClick={() => {
+                                setResults([]);
+                                localStorage.removeItem('automation_results');
+                            }}
+                            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        >
+                            Clear Results
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        {results.map((result, idx) => (
+                            <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="font-bold text-gray-900">{result.unit}</h4>
+                                    {result.status === "completed" ? (
+                                        <CheckCircle className="h-5 w-5 text-green-600" />
+                                    ) : (
+                                        <XCircle className="h-5 w-5 text-red-600" />
+                                    )}
+                                </div>
+
+                                {result.parts && (
+                                    <div className="space-y-2">
+                                        <p className="text-xs text-gray-600 mb-2">Generated presentations:</p>
+                                        {result.parts.map((part: any) => (
+                                            <div key={part.partNumber} className="flex items-center justify-between text-sm bg-gray-50 p-3 rounded border border-gray-200">
+                                                <span className="text-gray-700 font-medium">{part.partName}</span>
+                                                <div className="flex gap-2">
+                                                    {part.downloadUrl ? (
+                                                        <a
+                                                            href={part.downloadUrl}
+                                                            download={`${part.partName}.pptx`}
+                                                            className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-1 font-medium text-xs"
+                                                        >
+                                                            Download PPTX
+                                                            <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    ) : (
+                                                        <a
+                                                            href={part.gammaUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium text-xs"
+                                                        >
+                                                            Open in Gamma
+                                                            <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {result.parts.some((p: any) => !p.downloadUrl) && (
+                                            <p className="text-xs text-gray-500 mt-2">💡 Tip: For presentations without download links, open in Gamma and use "..." → Export → PowerPoint</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {result.error && (
+                                    <p className="text-sm text-red-600 mt-2">Error: {result.error}</p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
