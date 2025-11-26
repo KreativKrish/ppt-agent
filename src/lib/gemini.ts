@@ -18,7 +18,7 @@ export async function generateOutline(
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // Try with gemini-2.5-pro first, fall back to gemini-2.5-flash if overloaded
-    const modelNames = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    const modelNames = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
     let lastError: any = null;
 
     for (const modelName of modelNames) {

@@ -42,6 +42,9 @@ export async function POST(request: Request) {
                     geminiApiKey,
                     customPrompt,
                     googleTokens,
+                    imageSource,
+                    imageModel,
+                    themeId,
                 } = body;
 
                 // Validation
@@ -165,9 +168,9 @@ export async function POST(request: Request) {
                                 numCards: chunk.length,
                                 cardSplit: 'inputTextBreaks',
                                 exportAs: 'pptx',
-                                // change the images to no images
                                 imageOptions: {
-                                    source: 'noImages',
+                                    source: imageSource || 'noImages',
+                                    ...(imageSource === 'aiGenerated' && imageModel ? { model: imageModel } : {}),
                                 },
                                 cardOptions: {
                                     dimensions: '4x3'  // Set aspect ratio to 4x3
@@ -181,6 +184,10 @@ export async function POST(request: Request) {
 
                             if (gammaAdditionalInstructions) {
                                 gammaPayload.additionalInstructions = gammaAdditionalInstructions;
+                            }
+
+                            if (themeId) {
+                                gammaPayload.themeId = themeId;
                             }
 
                             const gammaResponse = await fetch('https://public-api.gamma.app/v1.0/generations', {

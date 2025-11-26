@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Input, TextArea } from "./ParamGroup";
+import { Input, TextArea, Select } from "./ParamGroup";
 import { Loader2, CheckCircle, XCircle, ExternalLink } from "lucide-react";
 
 interface AutomationResult {
@@ -14,6 +14,39 @@ interface AutomationResult {
     status: string;
     error?: string;
 }
+
+interface GammaTheme {
+    id: string;
+    name: string;
+    type: 'standard' | 'custom';
+    colorKeywords?: string[];
+    toneKeywords?: string[];
+}
+
+const IMAGE_SOURCE_OPTIONS = [
+    { value: "noImages", label: "No Images (Default)" },
+    { value: "aiGenerated", label: "AI Generated" },
+    { value: "unsplash", label: "Unsplash" },
+    { value: "giphy", label: "Giphy" },
+    { value: "webAllImages", label: "Web (All Images)" },
+    { value: "webFreeToUse", label: "Web (Free to Use)" },
+    { value: "webFreeToUseCommercially", label: "Web (Free to Use Commercially)" },
+    { value: "placeholder", label: "Placeholder" },
+];
+
+const IMAGE_MODEL_OPTIONS = [
+    { value: "", label: "Auto (Default)" },
+    { value: "flux-1-quick", label: "Flux 1 Quick" },
+    { value: "flux-1-pro", label: "Flux 1 Pro" },
+    { value: "dall-e-3", label: "DALL-E 3" },
+    { value: "imagen-3-flash", label: "Imagen 3 Flash" },
+    { value: "imagen-3-pro", label: "Imagen 3 Pro" },
+    { value: "imagen-4-pro", label: "Imagen 4 Pro" },
+    { value: "imagen-4-ultra", label: "Imagen 4 Ultra" },
+    { value: "ideogram-v3-turbo", label: "Ideogram v3 Turbo" },
+    { value: "ideogram-v3", label: "Ideogram v3" },
+    { value: "ideogram-v3-quality", label: "Ideogram v3 Quality" },
+];
 
 const DEFAULT_PROMPT = `Please create a comprehensive and detailed set of presentation slides for the university course unit titled {unitName}.
 Generate a {slideCount}-slide presentation outline with:
@@ -72,6 +105,13 @@ export default function AutomationPanel() {
     const [slidesPerUnit, setSlidesPerUnit] = useState(10);
     const [geminiApiKey, setGeminiApiKey] = useState("");
     const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
+    const [imageSource, setImageSource] = useState("noImages");
+    const [imageModel, setImageModel] = useState("");
+    const [themes, setThemes] = useState<GammaTheme[]>([]);
+    const [selectedThemeId, setSelectedThemeId] = useState("");
+    const [themeSearchQuery, setThemeSearchQuery] = useState("");
+    const [isLoadingThemes, setIsLoadingThemes] = useState(false);
+    const [showThemeDropdown, setShowThemeDropdown] = useState(false);
 
     const [isAuthenticating, setIsAuthenticating] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
@@ -105,6 +145,42 @@ export default function AutomationPanel() {
             setGoogleTokens(savedTokens);
         }
     }, []);
+
+    // Fetch themes from API on mount
+    React.useEffect(() => {
+        const fetchThemes = async () => {
+            setIsLoadingThemes(true);
+            try {
+                const response = await fetch('/api/themes');
+                if (response.ok) {
+                    const data = await response.json();
+                    setThemes(data.data || []);
+                } else {
+                    console.error('Failed to fetch themes');
+                }
+            } catch (error) {
+                console.error('Error fetching themes:', error);
+            } finally {
+                setIsLoadingThemes(false);
+            }
+        };
+        fetchThemes();
+    }, []);
+
+    // Close theme dropdown when clicking outside
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (showThemeDropdown && !target.closest('.theme-dropdown-container')) {
+                setShowThemeDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showThemeDropdown]);
 
     // Save tokens to localStorage whenever they change
     React.useEffect(() => {
@@ -178,6 +254,9 @@ export default function AutomationPanel() {
                     googleTokens: JSON.parse(googleTokens),
                     geminiApiKey,
                     customPrompt,
+                    imageSource,
+                    imageModel,
+                    themeId: selectedThemeId,
                 }),
             });
 
@@ -367,6 +446,111 @@ export default function AutomationPanel() {
                             Number of slides Gemini will generate for each unit
                         </p>
                     </div>
+                    <div>
+                        {/* Searchable Theme Selector */}
+                        <div className="relative theme-dropdown-container">
+                            <label className="text-sm font-bold text-gray-800 block mb-2">
+                                Gamma Theme (Optional)
+                            </label>
+                            <input
+                                type="text"
+                                placeholder={isLoadingThemes ? "Loading themes..." : "Search themes..."}
+                                value={themeSearchQuery}
+                                onChange={(e) => {
+                                    setThemeSearchQuery(e.target.value);
+                                    setShowThemeDropdown(true);
+                                }}
+                                onFocus={() => setShowThemeDropdown(true)}
+                                disabled={isLoadingThemes}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 text-gray-900"
+                            />
+
+                            {/* Display selected theme name */}
+                            {selectedThemeId && !showThemeDropdown && (
+                                <div className="mt-1 text-xs text-gray-600">
+                                    Selected: {themes.find(t => t.id === selectedThemeId)?.name || 'Unknown'}
+                                </div>
+                            )}
+
+                            {/* Dropdown with filtered themes */}
+                            {showThemeDropdown && themes.length > 0 && (
+                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                    {/* Clear selection option */}
+                                    <div
+                                        onClick={() => {
+                                            setSelectedThemeId("");
+                                            setThemeSearchQuery("");
+                                            setShowThemeDropdown(false);
+                                        }}
+                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200"
+                                    >
+                                        <span className="text-sm text-gray-600">No theme (Default)</span>
+                                    </div>
+
+                                    {themes
+                                        .filter(theme =>
+                                            theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
+                                        )
+                                        .map(theme => (
+                                            <div
+                                                key={theme.id}
+                                                onClick={() => {
+                                                    setSelectedThemeId(theme.id);
+                                                    setThemeSearchQuery(theme.name);
+                                                    setShowThemeDropdown(false);
+                                                }}
+                                                className={`px-3 py-2 hover:bg-indigo-50 cursor-pointer ${selectedThemeId === theme.id ? 'bg-indigo-100' : ''
+                                                    }`}
+                                            >
+                                                <div className="text-sm font-medium text-gray-900">{theme.name}</div>
+                                                <div className="text-xs text-gray-500 capitalize">{theme.type}</div>
+                                            </div>
+                                        ))
+                                    }
+                                    {themes.filter(theme =>
+                                        theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
+                                    ).length === 0 && (
+                                            <div className="px-3 py-2 text-sm text-gray-500">
+                                                No themes found
+                                            </div>
+                                        )}
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Choose a theme for your presentations
+                        </p>
+                    </div>
+                </div>
+
+                {/* Image Options */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <Select
+                            label="Image Source"
+                            name="imageSource"
+                            options={IMAGE_SOURCE_OPTIONS}
+                            value={imageSource}
+                            onChange={(e) => setImageSource(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Choose where to source images for your presentation
+                        </p>
+                    </div>
+                    {imageSource === 'aiGenerated' && (
+                        <div>
+                            <Select
+                                label="Image Model"
+                                name="imageModel"
+                                options={IMAGE_MODEL_OPTIONS}
+                                value={imageModel}
+                                onChange={(e) => setImageModel(e.target.value)}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                AI model to use for image generation
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Gamma Additional Instructions */}
