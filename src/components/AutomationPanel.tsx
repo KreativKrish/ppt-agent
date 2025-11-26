@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import { Input, TextArea, Select } from "./ParamGroup";
-import { Loader2, CheckCircle, XCircle, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, ExternalLink, ArrowLeft } from "lucide-react";
 import { extractDriveId } from "@/lib/drive-url-parser";
+import ManualGenerationPanel from "./ManualGenerationPanel";
 
 interface AutomationResult {
     unit: string;
@@ -121,6 +122,7 @@ export default function AutomationPanel() {
     const [results, setResults] = useState<AutomationResult[]>([]);
     const [error, setError] = useState("");
     const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+    const [currentView, setCurrentView] = useState<"automation" | "manual">("automation");
 
     // Load results from localStorage on mount
     React.useEffect(() => {
@@ -371,404 +373,437 @@ export default function AutomationPanel() {
 
     return (
         <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Automated ToC-to-PPT Pipeline</h2>
-                <p className="text-sm text-gray-600 mb-6">
-                    Upload an Excel ToC to Google Drive, and this tool will automatically generate presentations for each unit.
-                </p>
-
-                {/* Google Drive Auth */}
-                <div className="mb-6">
-                    <label className="text-sm font-bold text-gray-800 block mb-2">Google Drive Authentication</label>
-                    <div className="flex items-center gap-4">
+            {currentView === "manual" ? (
+                <>
+                    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
                         <button
-                            onClick={handleGoogleAuth}
-                            disabled={isAuthenticating || !!googleTokens}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                            onClick={() => setCurrentView("automation")}
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors font-medium text-sm mb-4"
                         >
-                            {isAuthenticating ? (
-                                <>
-                                    <Loader2 className="animate-spin inline mr-2 h-4 w-4" />
-                                    Authenticating...
-                                </>
-                            ) : googleTokens ? (
-                                <>
-                                    <CheckCircle className="inline mr-2 h-4 w-4" />
-                                    Authenticated
-                                </>
-                            ) : (
-                                "Connect Google Drive"
+                            <ArrowLeft className="w-4 h-4" />
+                            Back to Automation Pipeline
+                        </button>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Manual Generation</h2>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Generate presentations from custom outlines using the Gamma API.
+                        </p>
+                    </div>
+                    <ManualGenerationPanel />
+                </>
+            ) : (
+                <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Automated ToC-to-PPT Pipeline</h2>
+                    <p className="text-sm text-gray-600 mb-6">
+                        Upload an Excel ToC to Google Drive, and this tool will automatically generate presentations for each unit.
+                    </p>
+
+                    {/* Google Drive Auth */}
+                    <div className="mb-6">
+                        <label className="text-sm font-bold text-gray-800 block mb-2">Google Drive Authentication</label>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={handleGoogleAuth}
+                                disabled={isAuthenticating || !!googleTokens}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                            >
+                                {isAuthenticating ? (
+                                    <>
+                                        <Loader2 className="animate-spin inline mr-2 h-4 w-4" />
+                                        Authenticating...
+                                    </>
+                                ) : googleTokens ? (
+                                    <>
+                                        <CheckCircle className="inline mr-2 h-4 w-4" />
+                                        Authenticated
+                                    </>
+                                ) : (
+                                    "Connect Google Drive"
+                                )}
+                            </button>
+                            {googleTokens && (
+                                <span className="text-sm text-green-600">✓ Ready to access Drive</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Subject Name */}
+                    <div className="mb-6">
+                        <Input
+                            label="Subject/Course Name"
+                            name="subjectName"
+                            placeholder="e.g., Economics, Computer Science, Business Management"
+                            value={subjectName}
+                            onChange={(e) => setSubjectName(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Used to organize PPT links in a Google Sheet. Required for tracking.
+                        </p>
+                    </div>
+
+                    {/* File IDs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <Input
+                                label="Excel ToC File (Link or ID)"
+                                name="driveFileId"
+                                placeholder="Paste Drive link or ID: https://drive.google.com/file/d/..."
+                                value={driveFileId}
+                                onChange={(e) => setDriveFileId(e.target.value)}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Paste full Google Drive link or just the file ID
+                            </p>
+                        </div>
+                        <div>
+                            <Input
+                                label="Google Drive Folder (Link or ID) - Optional"
+                                name="driveFolderId"
+                                placeholder="Paste Drive folder link: https://drive.google.com/drive/folders/..."
+                                value={driveFolderId}
+                                onChange={(e) => setDriveFolderId(e.target.value)}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                For Google Sheets tracking - paste folder link or ID
+                            </p>
+                            <Input
+                                label="Gamma Folder ID (Optional)"
+                                name="gammaFolderId"
+                                placeholder="e.g. 8a9b0c..."
+                                value={gammaFolderId}
+                                onChange={(e) => setGammaFolderId(e.target.value)}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Organize presentations in a specific Gamma folder
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Advanced Options Toggle Button */}
+                    <div className="mb-6">
+                        <button
+                            type="button"
+                            onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors font-medium text-sm"
+                        >
+                            <svg
+                                className={`w-4 h-4 transition-transform ${showAdvancedOptions ? 'rotate-90' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            Advanced Options
+                            {!showAdvancedOptions && (
+                                <span className="text-xs text-gray-500">(Slides, Theme, Images, Prompts)</span>
                             )}
                         </button>
-                        {googleTokens && (
-                            <span className="text-sm text-green-600">✓ Ready to access Drive</span>
-                        )}
                     </div>
-                </div>
 
-                {/* Subject Name */}
-                <div className="mb-6">
-                    <Input
-                        label="Subject/Course Name"
-                        name="subjectName"
-                        placeholder="e.g., Economics, Computer Science, Business Management"
-                        value={subjectName}
-                        onChange={(e) => setSubjectName(e.target.value)}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Used to organize PPT links in a Google Sheet. Required for tracking.
-                    </p>
-                </div>
+                    {/* Advanced Options Section */}
+                    {showAdvancedOptions && (
+                        <div className="space-y-6 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <h3 className="text-lg font-bold text-gray-900 mb-4">Advanced Options</h3>
 
-                {/* File IDs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div>
-                        <Input
-                            label="Excel ToC File (Link or ID)"
-                            name="driveFileId"
-                            placeholder="Paste Drive link or ID: https://drive.google.com/file/d/..."
-                            value={driveFileId}
-                            onChange={(e) => setDriveFileId(e.target.value)}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Paste full Google Drive link or just the file ID
-                        </p>
-                    </div>
-                    <div>
-                        <Input
-                            label="Google Drive Folder (Link or ID) - Optional"
-                            name="driveFolderId"
-                            placeholder="Paste Drive folder link: https://drive.google.com/drive/folders/..."
-                            value={driveFolderId}
-                            onChange={(e) => setDriveFolderId(e.target.value)}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            For Google Sheets tracking - paste folder link or ID
-                        </p>
-                        <Input
-                            label="Gamma Folder ID (Optional)"
-                            name="gammaFolderId"
-                            placeholder="e.g. 8a9b0c..."
-                            value={gammaFolderId}
-                            onChange={(e) => setGammaFolderId(e.target.value)}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Organize presentations in a specific Gamma folder
-                        </p>
-                    </div>
-                </div>
-
-                {/* Advanced Options Toggle Button */}
-                <div className="mb-6">
-                    <button
-                        type="button"
-                        onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors font-medium text-sm"
-                    >
-                        <svg
-                            className={`w-4 h-4 transition-transform ${showAdvancedOptions ? 'rotate-90' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        Advanced Options
-                        {!showAdvancedOptions && (
-                            <span className="text-xs text-gray-500">(Slides, Theme, Images, Prompts)</span>
-                        )}
-                    </button>
-                </div>
-
-                {/* Advanced Options Section */}
-                {showAdvancedOptions && (
-                    <div className="space-y-6 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Advanced Options</h3>
-
-                        {/* Slides per Unit and Theme */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <Input
-                                    label="Slides per Unit"
-                                    name="slidesPerUnit"
-                                    type="number"
-                                    placeholder="e.g. 10, 60, 120"
-                                    value={slidesPerUnit.toString()}
-                                    onChange={(e) => setSlidesPerUnit(parseInt(e.target.value) || 10)}
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Number of slides Gemini will generate for each unit
-                                </p>
-                            </div>
-                            <div>
-                                {/* Searchable Theme Selector */}
-                                <div className="relative theme-dropdown-container">
-                                    <label className="text-sm font-bold text-gray-800 block mb-2">
-                                        Gamma Theme (Optional)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder={isLoadingThemes ? "Loading themes..." : "Search themes..."}
-                                        value={themeSearchQuery}
-                                        onChange={(e) => {
-                                            setThemeSearchQuery(e.target.value);
-                                            setShowThemeDropdown(true);
-                                        }}
-                                        onFocus={() => setShowThemeDropdown(true)}
-                                        disabled={isLoadingThemes}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 text-gray-900"
-                                    />
-
-                                    {/* Display selected theme name */}
-                                    {selectedThemeId && !showThemeDropdown && (
-                                        <div className="mt-1 text-xs text-gray-600">
-                                            Selected: {themes.find(t => t.id === selectedThemeId)?.name || 'Unknown'}
-                                        </div>
-                                    )}
-
-                                    {/* Dropdown with filtered themes */}
-                                    {showThemeDropdown && themes.length > 0 && (
-                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                            {/* Clear selection option */}
-                                            <div
-                                                onClick={() => {
-                                                    setSelectedThemeId("");
-                                                    setThemeSearchQuery("");
-                                                    setShowThemeDropdown(false);
-                                                }}
-                                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200"
-                                            >
-                                                <span className="text-sm text-gray-600">No theme (Default)</span>
-                                            </div>
-
-                                            {themes
-                                                .filter(theme =>
-                                                    theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
-                                                )
-                                                .map(theme => (
-                                                    <div
-                                                        key={theme.id}
-                                                        onClick={() => {
-                                                            setSelectedThemeId(theme.id);
-                                                            setThemeSearchQuery(theme.name);
-                                                            setShowThemeDropdown(false);
-                                                        }}
-                                                        className={`px-3 py-2 hover:bg-indigo-50 cursor-pointer ${selectedThemeId === theme.id ? 'bg-indigo-100' : ''
-                                                            }`}
-                                                    >
-                                                        <div className="text-sm font-medium text-gray-900">{theme.name}</div>
-                                                        <div className="text-xs text-gray-500 capitalize">{theme.type}</div>
-                                                    </div>
-                                                ))
-                                            }
-                                            {themes.filter(theme =>
-                                                theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
-                                            ).length === 0 && (
-                                                    <div className="px-3 py-2 text-sm text-gray-500">
-                                                        No themes found
-                                                    </div>
-                                                )}
-                                        </div>
-                                    )}
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Choose a theme for your presentations
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Image Options */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <Select
-                                    label="Image Source"
-                                    name="imageSource"
-                                    options={IMAGE_SOURCE_OPTIONS}
-                                    value={imageSource}
-                                    onChange={(e) => setImageSource(e.target.value)}
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Choose where to source images for your presentation
-                                </p>
-                            </div>
-                            {imageSource === 'aiGenerated' && (
+                            {/* Slides per Unit and Theme */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <Select
-                                        label="Image Model"
-                                        name="imageModel"
-                                        options={IMAGE_MODEL_OPTIONS}
-                                        value={imageModel}
-                                        onChange={(e) => setImageModel(e.target.value)}
+                                    <Input
+                                        label="Slides per Unit"
+                                        name="slidesPerUnit"
+                                        type="number"
+                                        placeholder="e.g. 10, 60, 120"
+                                        value={slidesPerUnit.toString()}
+                                        onChange={(e) => setSlidesPerUnit(parseInt(e.target.value) || 10)}
                                     />
                                     <p className="text-xs text-gray-500 mt-1">
-                                        AI model to use for image generation
+                                        Number of slides Gemini will generate for each unit
                                     </p>
                                 </div>
-                            )}
-                        </div>
+                                <div>
+                                    {/* Searchable Theme Selector */}
+                                    <div className="relative theme-dropdown-container">
+                                        <label className="text-sm font-bold text-gray-800 block mb-2">
+                                            Gamma Theme (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder={isLoadingThemes ? "Loading themes..." : "Search themes..."}
+                                            value={themeSearchQuery}
+                                            onChange={(e) => {
+                                                setThemeSearchQuery(e.target.value);
+                                                setShowThemeDropdown(true);
+                                            }}
+                                            onFocus={() => setShowThemeDropdown(true)}
+                                            disabled={isLoadingThemes}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 text-gray-900"
+                                        />
 
-                        {/* Gamma Additional Instructions */}
-                        <div className="mb-6">
-                            <TextArea
-                                label="Gamma Additional Instructions (Optional)"
-                                name="gammaAdditionalInstructions"
-                                placeholder="e.g., Make the card headings humorous and catchy, Use vibrant colors, etc."
-                                value={gammaAdditionalInstructions}
-                                onChange={(e) => setGammaAdditionalInstructions(e.target.value)}
-                                rows={3}
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Add specifications to steer Gamma's content, layouts, and design. See{" "}
-                                <a
-                                    href="https://developers.gamma.app/docs/generate-api-parameters-explained#additionalinstructions-optional"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-indigo-600 hover:underline"
-                                >
-                                    Gamma docs
-                                </a>
-                                {" "}for examples.
-                            </p>
-                        </div>
-
-                        {/* Gemini API Key */}
-                        <div className="mb-6">
-                            <div className="flex items-end gap-4">
-                                <div className="flex-1">
-                                    <Input
-                                        label="Gemini API Key (Optional)"
-                                        name="geminiApiKey"
-                                        type="password"
-                                        placeholder="Leave empty if saved in .env"
-                                        value={geminiApiKey}
-                                        onChange={(e) => setGeminiApiKey(e.target.value)}
-                                    />
-                                </div>
-                                <button
-                                    onClick={saveGeminiKey}
-                                    className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 text-sm font-medium h-10 mb-0.5"
-                                >
-                                    Save to Env
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Custom Prompt */}
-                        <div className="mb-6">
-                            <TextArea
-                                label="Outline Generation Prompt"
-                                name="customPrompt"
-                                value={customPrompt}
-                                onChange={(e) => setCustomPrompt(e.target.value)}
-                                className="min-h-[200px] font-mono text-xs"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Use placeholders: {"{unitName}"}, {"{level1Topics}"}, {"{level2Topics}"}, {"{slideCount}"}
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Start Button */}
-                <button
-                    onClick={startAutomation}
-                    disabled={isRunning || !googleTokens}
-                    className="w-full px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-base"
-                >
-                    {isRunning ? (
-                        <>
-                            <Loader2 className="animate-spin inline mr-2 h-5 w-5" />
-                            Processing...
-                        </>
-                    ) : (
-                        "Start Automation"
-                    )}
-                </button>
-
-                {/* Progress */}
-                {progress && (
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                        {progress}
-                    </div>
-                )}
-
-                {/* Error */}
-                {error && (
-                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-                        <strong>Error:</strong> {error}
-                    </div>
-                )}
-            </div>
-
-            {/* Results */}
-            {results.length > 0 && (
-                <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xl font-bold text-gray-900">Results</h3>
-                        <button
-                            onClick={() => {
-                                setResults([]);
-                                localStorage.removeItem('automation_results');
-                            }}
-                            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                        >
-                            Clear Results
-                        </button>
-                    </div>
-                    <div className="space-y-4">
-                        {results.map((result, idx) => (
-                            <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="font-bold text-gray-900">{result.unit}</h4>
-                                    {result.status === "completed" ? (
-                                        <CheckCircle className="h-5 w-5 text-green-600" />
-                                    ) : (
-                                        <XCircle className="h-5 w-5 text-red-600" />
-                                    )}
-                                </div>
-
-                                {result.parts && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs text-gray-600 mb-2">Generated presentations:</p>
-                                        {result.parts.map((part: any) => (
-                                            <div key={part.partNumber} className="flex items-center justify-between text-sm bg-gray-50 p-3 rounded border border-gray-200">
-                                                <span className="text-gray-700 font-medium">{part.partName}</span>
-                                                <div className="flex gap-2">
-                                                    {part.downloadUrl ? (
-                                                        <a
-                                                            href={part.downloadUrl}
-                                                            download={`${part.partName}.pptx`}
-                                                            className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-1 font-medium text-xs"
-                                                        >
-                                                            Download PPTX
-                                                            <ExternalLink className="h-3 w-3" />
-                                                        </a>
-                                                    ) : (
-                                                        <a
-                                                            href={part.gammaUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium text-xs"
-                                                        >
-                                                            Open in Gamma
-                                                            <ExternalLink className="h-3 w-3" />
-                                                        </a>
-                                                    )}
-                                                </div>
+                                        {/* Display selected theme name */}
+                                        {selectedThemeId && !showThemeDropdown && (
+                                            <div className="mt-1 text-xs text-gray-600">
+                                                Selected: {themes.find(t => t.id === selectedThemeId)?.name || 'Unknown'}
                                             </div>
-                                        ))}
-                                        {result.parts.some((p: any) => !p.downloadUrl) && (
-                                            <p className="text-xs text-gray-500 mt-2">💡 Tip: For presentations without download links, open in Gamma and use "..." → Export → PowerPoint</p>
+                                        )}
+
+                                        {/* Dropdown with filtered themes */}
+                                        {showThemeDropdown && themes.length > 0 && (
+                                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                                {/* Clear selection option */}
+                                                <div
+                                                    onClick={() => {
+                                                        setSelectedThemeId("");
+                                                        setThemeSearchQuery("");
+                                                        setShowThemeDropdown(false);
+                                                    }}
+                                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200"
+                                                >
+                                                    <span className="text-sm text-gray-600">No theme (Default)</span>
+                                                </div>
+
+                                                {themes
+                                                    .filter(theme =>
+                                                        theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
+                                                    )
+                                                    .map(theme => (
+                                                        <div
+                                                            key={theme.id}
+                                                            onClick={() => {
+                                                                setSelectedThemeId(theme.id);
+                                                                setThemeSearchQuery(theme.name);
+                                                                setShowThemeDropdown(false);
+                                                            }}
+                                                            className={`px-3 py-2 hover:bg-indigo-50 cursor-pointer ${selectedThemeId === theme.id ? 'bg-indigo-100' : ''
+                                                                }`}
+                                                        >
+                                                            <div className="text-sm font-medium text-gray-900">{theme.name}</div>
+                                                            <div className="text-xs text-gray-500 capitalize">{theme.type}</div>
+                                                        </div>
+                                                    ))
+                                                }
+                                                {themes.filter(theme =>
+                                                    theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
+                                                ).length === 0 && (
+                                                        <div className="px-3 py-2 text-sm text-gray-500">
+                                                            No themes found
+                                                        </div>
+                                                    )}
+                                            </div>
                                         )}
                                     </div>
-                                )}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Choose a theme for your presentations
+                                    </p>
+                                </div>
+                            </div>
 
-                                {result.error && (
-                                    <p className="text-sm text-red-600 mt-2">Error: {result.error}</p>
+                            {/* Image Options */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Select
+                                        label="Image Source"
+                                        name="imageSource"
+                                        options={IMAGE_SOURCE_OPTIONS}
+                                        value={imageSource}
+                                        onChange={(e) => setImageSource(e.target.value)}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Choose where to source images for your presentation
+                                    </p>
+                                </div>
+                                {imageSource === 'aiGenerated' && (
+                                    <div>
+                                        <Select
+                                            label="Image Model"
+                                            name="imageModel"
+                                            options={IMAGE_MODEL_OPTIONS}
+                                            value={imageModel}
+                                            onChange={(e) => setImageModel(e.target.value)}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            AI model to use for image generation
+                                        </p>
+                                    </div>
                                 )}
                             </div>
-                        ))}
-                    </div>
+
+                            {/* Gamma Additional Instructions */}
+                            <div className="mb-6">
+                                <TextArea
+                                    label="Gamma Additional Instructions (Optional)"
+                                    name="gammaAdditionalInstructions"
+                                    placeholder="e.g., Make the card headings humorous and catchy, Use vibrant colors, etc."
+                                    value={gammaAdditionalInstructions}
+                                    onChange={(e) => setGammaAdditionalInstructions(e.target.value)}
+                                    rows={3}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Add specifications to steer Gamma's content, layouts, and design. See{" "}
+                                    <a
+                                        href="https://developers.gamma.app/docs/generate-api-parameters-explained#additionalinstructions-optional"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-indigo-600 hover:underline"
+                                    >
+                                        Gamma docs
+                                    </a>
+                                    {" "}for examples.
+                                </p>
+                            </div>
+
+                            {/* Gemini API Key */}
+                            <div className="mb-6">
+                                <div className="flex items-end gap-4">
+                                    <div className="flex-1">
+                                        <Input
+                                            label="Gemini API Key (Optional)"
+                                            name="geminiApiKey"
+                                            type="password"
+                                            placeholder="Leave empty if saved in .env"
+                                            value={geminiApiKey}
+                                            onChange={(e) => setGeminiApiKey(e.target.value)}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={saveGeminiKey}
+                                        className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 text-sm font-medium h-10 mb-0.5"
+                                    >
+                                        Save to Env
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Custom Prompt */}
+                            <div className="mb-6">
+                                <TextArea
+                                    label="Outline Generation Prompt"
+                                    name="customPrompt"
+                                    value={customPrompt}
+                                    onChange={(e) => setCustomPrompt(e.target.value)}
+                                    className="min-h-[200px] font-mono text-xs"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Use placeholders: {"{unitName}"}, {"{level1Topics}"}, {"{level2Topics}"}, {"{slideCount}"}
+                                </p>
+                            </div>
+
+                            {/* Manual Generation Button */}
+                            <div className="mt-6 pt-6 border-t border-gray-200">
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrentView("manual")}
+                                    className="w-full px-4 py-3 bg-gray-700 text-white rounded-md hover:bg-gray-800 transition-colors font-medium text-sm"
+                                >
+                                    Switch to Manual Generation
+                                </button>
+                                <p className="text-xs text-gray-500 mt-2">
+                                    Generate presentations manually from custom outlines without automation
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Start Button */}
+                    <button
+                        onClick={startAutomation}
+                        disabled={isRunning || !googleTokens}
+                        className="w-full px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-base"
+                    >
+                        {isRunning ? (
+                            <>
+                                <Loader2 className="animate-spin inline mr-2 h-5 w-5" />
+                                Processing...
+                            </>
+                        ) : (
+                            "Start Automation"
+                        )}
+                    </button>
+
+                    {/* Progress */}
+                    {progress && (
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                            {progress}
+                        </div>
+                    )}
+
+                    {/* Error */}
+                    {error && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                            <strong>Error:</strong> {error}
+                        </div>
+                    )}
+
+                    {/* Results */}
+                    {results.length > 0 && (
+                        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-300">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-bold text-gray-900">Results</h3>
+                                <button
+                                    onClick={() => {
+                                        setResults([]);
+                                        localStorage.removeItem('automation_results');
+                                    }}
+                                    className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                >
+                                    Clear Results
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                {results.map((result, idx) => (
+                                    <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-bold text-gray-900">{result.unit}</h4>
+                                            {result.status === "completed" ? (
+                                                <CheckCircle className="h-5 w-5 text-green-600" />
+                                            ) : (
+                                                <XCircle className="h-5 w-5 text-red-600" />
+                                            )}
+                                        </div>
+
+                                        {result.parts && (
+                                            <div className="space-y-2">
+                                                <p className="text-xs text-gray-600 mb-2">Generated presentations:</p>
+                                                {result.parts.map((part: any) => (
+                                                    <div key={part.partNumber} className="flex items-center justify-between text-sm bg-gray-50 p-3 rounded border border-gray-200">
+                                                        <span className="text-gray-700 font-medium">{part.partName}</span>
+                                                        <div className="flex gap-2">
+                                                            {part.downloadUrl ? (
+                                                                <a
+                                                                    href={part.downloadUrl}
+                                                                    download={`${part.partName}.pptx`}
+                                                                    className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-1 font-medium text-xs"
+                                                                >
+                                                                    Download PPTX
+                                                                    <ExternalLink className="h-3 w-3" />
+                                                                </a>
+                                                            ) : (
+                                                                <a
+                                                                    href={part.gammaUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium text-xs"
+                                                                >
+                                                                    Open in Gamma
+                                                                    <ExternalLink className="h-3 w-3" />
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {result.parts.some((p: any) => !p.downloadUrl) && (
+                                                    <p className="text-xs text-gray-500 mt-2">💡 Tip: For presentations without download links, open in Gamma and use "..." → Export → PowerPoint</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {result.error && (
+                                            <p className="text-sm text-red-600 mt-2">Error: {result.error}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
