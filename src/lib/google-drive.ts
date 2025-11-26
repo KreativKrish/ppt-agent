@@ -4,6 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 const SCOPES = [
     'https://www.googleapis.com/auth/drive.readonly',
     'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/spreadsheets',
 ];
 
 export class GoogleDriveService {
@@ -110,6 +111,95 @@ export class GoogleDriveService {
         });
 
         return response.data;
+    }
+
+    async listFilesInFolder(folderId: string): Promise<Array<{ id: string; name: string; mimeType: string }>> {
+        const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+
+        try {
+            const response = await drive.files.list({
+                q: `'${folderId}' in parents and trashed=false`,
+                fields: 'files(id, name, mimeType)',
+                pageSize: 100,
+            });
+
+            return response.data.files as Array<{ id: string; name: string; mimeType: string }>;
+        } catch (error: any) {
+            console.error('Error listing files in folder:', error.message);
+            throw new Error(`Failed to list files: ${error.message}`);
+        }
+    }
+
+    async createSpreadsheet(title: string, folderId: string): Promise<string> {
+        const sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+        const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+
+        try {
+            // Create spreadsheet
+            const createResponse = await sheets.spreadsheets.create({
+                requestBody: {
+                    properties: {
+                        title: title,
+                    },
+                    sheets: [{
+                        properties: {
+                            title: 'PPT Links',
+                        },
+                    }],
+                },
+            });
+
+            const spreadsheetId = createResponse.data.spreadsheetId!;
+
+            // Move to specified folder
+            await drive.files.update({
+                fileId: spreadsheetId,
+                addParents: folderId,
+                fields: 'id, parents',
+            });
+
+            console.log(`Created spreadsheet: ${spreadsheetId} in folder: ${folderId}`);
+            return spreadsheetId;
+        } catch (error: any) {
+            console.error('Error creating spreadsheet:', error.message);
+            throw new Error(`Failed to create spreadsheet: ${error.message}`);
+        }
+    }
+
+    async appendRowsToSheet(spreadsheetId: string, values: any[][]): Promise<void> {
+        const sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+
+        try {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: spreadsheetId,
+                range: 'PPT Links!A:B',
+                valueInputOption: 'RAW',
+                requestBody: {
+                    values: values,
+                },
+            });
+
+            console.log(`Appended ${values.length} rows to spreadsheet ${spreadsheetId}`);
+        } catch (error: any) {
+            console.error('Error appending rows to sheet:', error.message);
+            throw new Error(`Failed to append rows: ${error.message}`);
+        }
+    }
+
+    async getSheetData(spreadsheetId: string, range: string = 'PPT Links!A:B'): Promise<any[][]> {
+        const sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+
+        try {
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: spreadsheetId,
+                range: range,
+            });
+
+            return response.data.values || [];
+        } catch (error: any) {
+            console.error('Error getting sheet data:', error.message);
+            throw new Error(`Failed to get sheet data: ${error.message}`);
+        }
     }
 }
 

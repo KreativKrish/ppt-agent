@@ -1,6 +1,7 @@
 import { driveService } from '@/lib/google-drive';
 import { parseExcelToC } from '@/lib/excel-parser';
 import { generateOutline, splitOutlineIntoChunks, convertOutlineToText } from '@/lib/gemini';
+import { findSimilarSheet } from '@/lib/sheet-matcher';
 
 export async function POST(request: Request) {
     const encoder = new TextEncoder();
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
                     driveFileId,
                     driveFolderId,
                     gammaFolderId,
+                    subjectName,
                     gammaAdditionalInstructions,
                     slidesPerUnit,
                     geminiApiKey,
@@ -83,6 +85,64 @@ export async function POST(request: Request) {
                 const units = parseExcelToC(excelBuffer);
                 console.log(`Found ${units.length} units`);
                 sendUpdate({ type: 'progress', message: `Found ${units.length} units` });
+
+                // Setup Google Sheet for PPT tracking (if folder and subject provided)
+                let trackingSpreadsheetId: string | null = null;
+                if (driveFolderId && subjectName) {
+                    try {
+                        sendUpdate({ type: 'progress', message: 'Setting up Google Sheet tracker...' });
+                        console.log('Setting up Google Sheet for subject:', subjectName);
+
+                        // List all files in the folder
+                        const filesInFolder = await driveService.listFilesInFolder(driveFolderId);
+
+                        // Filter only spreadsheets
+                        const spreadsheets = filesInFolder.filter(
+                            file => file.mimeType === 'application/vnd.google-apps.spreadsheet'
+                        );
+
+                        console.log(`Found ${spreadsheets.length} spreadsheets in folder`);
+
+                        // Try to find existing sheet with fuzzy matching
+                        const matchedSheet = findSimilarSheet(
+                            subjectName,
+                            spreadsheets.map(s => ({ id: s.id, name: s.name })),
+                            0.75  // 75% similarity threshold
+                        );
+
+                        if (matchedSheet) {
+                            console.log(`Found existing sheet: ${matchedSheet.name} (similarity: ${(matchedSheet.similarity * 100).toFixed(1)}%)`);
+                            trackingSpreadsheetId = matchedSheet.id;
+                            sendUpdate({
+                                type: 'progress',
+                                message: `Will update existing sheet: ${matchedSheet.name}`
+                            });
+                        } else {
+                            console.log('No similar sheet found, creating new one...');
+                            const sheetTitle = `${subjectName}_PPT_Tracker`;
+                            trackingSpreadsheetId = await driveService.createSpreadsheet(sheetTitle, driveFolderId);
+
+                            // Add header row to new sheet
+                            await driveService.appendRowsToSheet(trackingSpreadsheetId, [
+                                ['PPT Name', 'Gamma URL']
+                            ]);
+
+                            sendUpdate({
+                                type: 'progress',
+                                message: `Created tracking sheet: ${sheetTitle}`
+                            });
+                        }
+
+                        console.log(`Tracking spreadsheet ID: ${trackingSpreadsheetId}`);
+                    } catch (sheetError: any) {
+                        console.error('Error setting up tracking sheet:', sheetError);
+                        sendUpdate({
+                            type: 'progress',
+                            message: `Warning: Could not setup tracking sheet: ${sheetError.message}`
+                        });
+                        // Continue with automation even if sheet setup fails
+                    }
+                }
 
                 // Process units sequentially
                 for (let i = 0; i < units.length; i++) {
@@ -328,6 +388,22 @@ export async function POST(request: Request) {
                             status: 'completed',
                             parts: chunkUrls
                         });
+
+                        // Append to Google Sheet if tracking is enabled
+                        if (trackingSpreadsheetId && chunkUrls.length > 0) {
+                            try {
+                                const rowsToAppend = chunkUrls.map(part => [
+                                    part.partName,
+                                    part.gammaUrl
+                                ]);
+
+                                await driveService.appendRowsToSheet(trackingSpreadsheetId, rowsToAppend);
+                                console.log(`Added ${rowsToAppend.length} PPT links to tracking sheet`);
+                            } catch (sheetError: any) {
+                                console.error(`Error appending to sheet:`, sheetError.message);
+                                // Don't fail the automation if sheet update fails
+                            }
+                        }
 
                     } catch (error: any) {
                         console.error(`Error processing ${unit.unitName}:`, error);

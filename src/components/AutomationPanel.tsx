@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Input, TextArea, Select } from "./ParamGroup";
 import { Loader2, CheckCircle, XCircle, ExternalLink } from "lucide-react";
+import { extractDriveId } from "@/lib/drive-url-parser";
 
 interface AutomationResult {
     unit: string;
@@ -79,7 +80,7 @@ Slide 1: Introduction to Economic Systems
 
 ---
 
-2. Separators: Use a horizontal line (---) to separate each slide.
+2. Separators: Use \n---\n to separate each slide.
 3. No Citations: Absolutely no citations (e.g., ) are allowed in the response.
 
 IMPORTANT: Each slide MUST have exactly 3 bullet points. Do not create slides with only titles. Every slide needs content.`;
@@ -101,6 +102,7 @@ export default function AutomationPanel() {
     const [driveFileId, setDriveFileId] = useState("");
     const [driveFolderId, setDriveFolderId] = useState("");
     const [gammaFolderId, setGammaFolderId] = useState("");
+    const [subjectName, setSubjectName] = useState("");
     const [gammaAdditionalInstructions, setGammaAdditionalInstructions] = useState(DEFAULT_GAMMA_ADDITIONAL_INSTRUCTIONS);
     const [slidesPerUnit, setSlidesPerUnit] = useState(10);
     const [geminiApiKey, setGeminiApiKey] = useState("");
@@ -118,6 +120,7 @@ export default function AutomationPanel() {
     const [progress, setProgress] = useState("");
     const [results, setResults] = useState<AutomationResult[]>([]);
     const [error, setError] = useState("");
+    const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
     // Load results from localStorage on mount
     React.useEffect(() => {
@@ -240,15 +243,21 @@ export default function AutomationPanel() {
         setProgress("Starting automation...");
 
         try {
+            // Extract IDs from URLs automatically
+            const extractedFileId = extractDriveId(driveFileId);
+            const extractedDriveFolderId = extractDriveId(driveFolderId);
+            const extractedGammaFolderId = gammaFolderId; // Gamma folder IDs are not URLs
+
             const response = await fetch("/api/automate", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    driveFileId,
-                    driveFolderId,
-                    gammaFolderId,
+                    driveFileId: extractedFileId,
+                    driveFolderId: extractedDriveFolderId,
+                    gammaFolderId: extractedGammaFolderId,
+                    subjectName,
                     gammaAdditionalInstructions,
                     slidesPerUnit,
                     googleTokens: JSON.parse(googleTokens),
@@ -397,30 +406,44 @@ export default function AutomationPanel() {
                     </div>
                 </div>
 
+                {/* Subject Name */}
+                <div className="mb-6">
+                    <Input
+                        label="Subject/Course Name"
+                        name="subjectName"
+                        placeholder="e.g., Economics, Computer Science, Business Management"
+                        value={subjectName}
+                        onChange={(e) => setSubjectName(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Used to organize PPT links in a Google Sheet. Required for tracking.
+                    </p>
+                </div>
+
                 {/* File IDs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div>
                         <Input
-                            label="Excel ToC File ID"
+                            label="Excel ToC File (Link or ID)"
                             name="driveFileId"
-                            placeholder="Get from Drive URL: /file/d/FILE_ID/view"
+                            placeholder="Paste Drive link or ID: https://drive.google.com/file/d/..."
                             value={driveFileId}
                             onChange={(e) => setDriveFileId(e.target.value)}
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                            Open file in Drive, copy ID from URL
+                            Paste full Google Drive link or just the file ID
                         </p>
                     </div>
                     <div>
                         <Input
-                            label="Google Drive Folder ID (Optional - not used currently)"
+                            label="Google Drive Folder (Link or ID) - Optional"
                             name="driveFolderId"
-                            placeholder="e.g. 1a2b3c..."
+                            placeholder="Paste Drive folder link: https://drive.google.com/drive/folders/..."
                             value={driveFolderId}
                             onChange={(e) => setDriveFolderId(e.target.value)}
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                            Not required - presentations will be accessible via Gamma links
+                            For Google Sheets tracking - paste folder link or ID
                         </p>
                         <Input
                             label="Gamma Folder ID (Optional)"
@@ -433,185 +456,218 @@ export default function AutomationPanel() {
                             Organize presentations in a specific Gamma folder
                         </p>
                     </div>
-                    <div>
-                        <Input
-                            label="Slides per Unit"
-                            name="slidesPerUnit"
-                            type="number"
-                            placeholder="e.g. 10, 60, 120"
-                            value={slidesPerUnit.toString()}
-                            onChange={(e) => setSlidesPerUnit(parseInt(e.target.value) || 10)}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Number of slides Gemini will generate for each unit
-                        </p>
-                    </div>
-                    <div>
-                        {/* Searchable Theme Selector */}
-                        <div className="relative theme-dropdown-container">
-                            <label className="text-sm font-bold text-gray-800 block mb-2">
-                                Gamma Theme (Optional)
-                            </label>
-                            <input
-                                type="text"
-                                placeholder={isLoadingThemes ? "Loading themes..." : "Search themes..."}
-                                value={themeSearchQuery}
-                                onChange={(e) => {
-                                    setThemeSearchQuery(e.target.value);
-                                    setShowThemeDropdown(true);
-                                }}
-                                onFocus={() => setShowThemeDropdown(true)}
-                                disabled={isLoadingThemes}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 text-gray-900"
-                            />
+                </div>
 
-                            {/* Display selected theme name */}
-                            {selectedThemeId && !showThemeDropdown && (
-                                <div className="mt-1 text-xs text-gray-600">
-                                    Selected: {themes.find(t => t.id === selectedThemeId)?.name || 'Unknown'}
-                                </div>
-                            )}
+                {/* Advanced Options Toggle Button */}
+                <div className="mb-6">
+                    <button
+                        type="button"
+                        onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors font-medium text-sm"
+                    >
+                        <svg
+                            className={`w-4 h-4 transition-transform ${showAdvancedOptions ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Advanced Options
+                        {!showAdvancedOptions && (
+                            <span className="text-xs text-gray-500">(Slides, Theme, Images, Prompts)</span>
+                        )}
+                    </button>
+                </div>
 
-                            {/* Dropdown with filtered themes */}
-                            {showThemeDropdown && themes.length > 0 && (
-                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                    {/* Clear selection option */}
-                                    <div
-                                        onClick={() => {
-                                            setSelectedThemeId("");
-                                            setThemeSearchQuery("");
-                                            setShowThemeDropdown(false);
+                {/* Advanced Options Section */}
+                {showAdvancedOptions && (
+                    <div className="space-y-6 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Advanced Options</h3>
+
+                        {/* Slides per Unit and Theme */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <Input
+                                    label="Slides per Unit"
+                                    name="slidesPerUnit"
+                                    type="number"
+                                    placeholder="e.g. 10, 60, 120"
+                                    value={slidesPerUnit.toString()}
+                                    onChange={(e) => setSlidesPerUnit(parseInt(e.target.value) || 10)}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Number of slides Gemini will generate for each unit
+                                </p>
+                            </div>
+                            <div>
+                                {/* Searchable Theme Selector */}
+                                <div className="relative theme-dropdown-container">
+                                    <label className="text-sm font-bold text-gray-800 block mb-2">
+                                        Gamma Theme (Optional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder={isLoadingThemes ? "Loading themes..." : "Search themes..."}
+                                        value={themeSearchQuery}
+                                        onChange={(e) => {
+                                            setThemeSearchQuery(e.target.value);
+                                            setShowThemeDropdown(true);
                                         }}
-                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200"
-                                    >
-                                        <span className="text-sm text-gray-600">No theme (Default)</span>
-                                    </div>
+                                        onFocus={() => setShowThemeDropdown(true)}
+                                        disabled={isLoadingThemes}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 text-gray-900"
+                                    />
 
-                                    {themes
-                                        .filter(theme =>
-                                            theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
-                                        )
-                                        .map(theme => (
+                                    {/* Display selected theme name */}
+                                    {selectedThemeId && !showThemeDropdown && (
+                                        <div className="mt-1 text-xs text-gray-600">
+                                            Selected: {themes.find(t => t.id === selectedThemeId)?.name || 'Unknown'}
+                                        </div>
+                                    )}
+
+                                    {/* Dropdown with filtered themes */}
+                                    {showThemeDropdown && themes.length > 0 && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                            {/* Clear selection option */}
                                             <div
-                                                key={theme.id}
                                                 onClick={() => {
-                                                    setSelectedThemeId(theme.id);
-                                                    setThemeSearchQuery(theme.name);
+                                                    setSelectedThemeId("");
+                                                    setThemeSearchQuery("");
                                                     setShowThemeDropdown(false);
                                                 }}
-                                                className={`px-3 py-2 hover:bg-indigo-50 cursor-pointer ${selectedThemeId === theme.id ? 'bg-indigo-100' : ''
-                                                    }`}
+                                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200"
                                             >
-                                                <div className="text-sm font-medium text-gray-900">{theme.name}</div>
-                                                <div className="text-xs text-gray-500 capitalize">{theme.type}</div>
+                                                <span className="text-sm text-gray-600">No theme (Default)</span>
                                             </div>
-                                        ))
-                                    }
-                                    {themes.filter(theme =>
-                                        theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
-                                    ).length === 0 && (
-                                            <div className="px-3 py-2 text-sm text-gray-500">
-                                                No themes found
-                                            </div>
-                                        )}
+
+                                            {themes
+                                                .filter(theme =>
+                                                    theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
+                                                )
+                                                .map(theme => (
+                                                    <div
+                                                        key={theme.id}
+                                                        onClick={() => {
+                                                            setSelectedThemeId(theme.id);
+                                                            setThemeSearchQuery(theme.name);
+                                                            setShowThemeDropdown(false);
+                                                        }}
+                                                        className={`px-3 py-2 hover:bg-indigo-50 cursor-pointer ${selectedThemeId === theme.id ? 'bg-indigo-100' : ''
+                                                            }`}
+                                                    >
+                                                        <div className="text-sm font-medium text-gray-900">{theme.name}</div>
+                                                        <div className="text-xs text-gray-500 capitalize">{theme.type}</div>
+                                                    </div>
+                                                ))
+                                            }
+                                            {themes.filter(theme =>
+                                                theme.name.toLowerCase().includes(themeSearchQuery.toLowerCase())
+                                            ).length === 0 && (
+                                                    <div className="px-3 py-2 text-sm text-gray-500">
+                                                        No themes found
+                                                    </div>
+                                                )}
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Choose a theme for your presentations
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Image Options */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <Select
+                                    label="Image Source"
+                                    name="imageSource"
+                                    options={IMAGE_SOURCE_OPTIONS}
+                                    value={imageSource}
+                                    onChange={(e) => setImageSource(e.target.value)}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Choose where to source images for your presentation
+                                </p>
+                            </div>
+                            {imageSource === 'aiGenerated' && (
+                                <div>
+                                    <Select
+                                        label="Image Model"
+                                        name="imageModel"
+                                        options={IMAGE_MODEL_OPTIONS}
+                                        value={imageModel}
+                                        onChange={(e) => setImageModel(e.target.value)}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        AI model to use for image generation
+                                    </p>
                                 </div>
                             )}
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            Choose a theme for your presentations
-                        </p>
-                    </div>
-                </div>
 
-                {/* Image Options */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div>
-                        <Select
-                            label="Image Source"
-                            name="imageSource"
-                            options={IMAGE_SOURCE_OPTIONS}
-                            value={imageSource}
-                            onChange={(e) => setImageSource(e.target.value)}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Choose where to source images for your presentation
-                        </p>
-                    </div>
-                    {imageSource === 'aiGenerated' && (
-                        <div>
-                            <Select
-                                label="Image Model"
-                                name="imageModel"
-                                options={IMAGE_MODEL_OPTIONS}
-                                value={imageModel}
-                                onChange={(e) => setImageModel(e.target.value)}
+                        {/* Gamma Additional Instructions */}
+                        <div className="mb-6">
+                            <TextArea
+                                label="Gamma Additional Instructions (Optional)"
+                                name="gammaAdditionalInstructions"
+                                placeholder="e.g., Make the card headings humorous and catchy, Use vibrant colors, etc."
+                                value={gammaAdditionalInstructions}
+                                onChange={(e) => setGammaAdditionalInstructions(e.target.value)}
+                                rows={3}
                             />
                             <p className="text-xs text-gray-500 mt-1">
-                                AI model to use for image generation
+                                Add specifications to steer Gamma's content, layouts, and design. See{" "}
+                                <a
+                                    href="https://developers.gamma.app/docs/generate-api-parameters-explained#additionalinstructions-optional"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 hover:underline"
+                                >
+                                    Gamma docs
+                                </a>
+                                {" "}for examples.
                             </p>
                         </div>
-                    )}
-                </div>
 
-                {/* Gamma Additional Instructions */}
-                <div className="mb-6">
-                    <TextArea
-                        label="Gamma Additional Instructions (Optional)"
-                        name="gammaAdditionalInstructions"
-                        placeholder="e.g., Make the card headings humorous and catchy, Use vibrant colors, etc."
-                        value={gammaAdditionalInstructions}
-                        onChange={(e) => setGammaAdditionalInstructions(e.target.value)}
-                        rows={3}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Add specifications to steer Gamma's content, layouts, and design. See{" "}
-                        <a
-                            href="https://developers.gamma.app/docs/generate-api-parameters-explained#additionalinstructions-optional"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-indigo-600 hover:underline"
-                        >
-                            Gamma docs
-                        </a>
-                        {" "}for examples.
-                    </p>
-                </div>
-
-                {/* Gemini API Key */}
-                <div className="mb-6">
-                    <div className="flex items-end gap-4">
-                        <div className="flex-1">
-                            <Input
-                                label="Gemini API Key (Optional)"
-                                name="geminiApiKey"
-                                type="password"
-                                placeholder="Leave empty if saved in .env"
-                                value={geminiApiKey}
-                                onChange={(e) => setGeminiApiKey(e.target.value)}
-                            />
+                        {/* Gemini API Key */}
+                        <div className="mb-6">
+                            <div className="flex items-end gap-4">
+                                <div className="flex-1">
+                                    <Input
+                                        label="Gemini API Key (Optional)"
+                                        name="geminiApiKey"
+                                        type="password"
+                                        placeholder="Leave empty if saved in .env"
+                                        value={geminiApiKey}
+                                        onChange={(e) => setGeminiApiKey(e.target.value)}
+                                    />
+                                </div>
+                                <button
+                                    onClick={saveGeminiKey}
+                                    className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 text-sm font-medium h-10 mb-0.5"
+                                >
+                                    Save to Env
+                                </button>
+                            </div>
                         </div>
-                        <button
-                            onClick={saveGeminiKey}
-                            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 text-sm font-medium h-10 mb-0.5"
-                        >
-                            Save to Env
-                        </button>
-                    </div>
-                </div>
 
-                {/* Custom Prompt */}
-                <div className="mb-6">
-                    <TextArea
-                        label="Outline Generation Prompt"
-                        name="customPrompt"
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        className="min-h-[200px] font-mono text-xs"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Use placeholders: {"{unitName}"}, {"{level1Topics}"}, {"{level2Topics}"}, {"{slideCount}"}
-                    </p>
-                </div>
+                        {/* Custom Prompt */}
+                        <div className="mb-6">
+                            <TextArea
+                                label="Outline Generation Prompt"
+                                name="customPrompt"
+                                value={customPrompt}
+                                onChange={(e) => setCustomPrompt(e.target.value)}
+                                className="min-h-[200px] font-mono text-xs"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Use placeholders: {"{unitName}"}, {"{level1Topics}"}, {"{level2Topics}"}, {"{slideCount}"}
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Start Button */}
                 <button
