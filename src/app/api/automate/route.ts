@@ -82,16 +82,20 @@ export async function POST(request: Request) {
                 // Step 2: Parse Excel
                 console.log('Parsing Excel ToC...');
                 sendUpdate({ type: 'progress', message: 'Parsing Excel ToC...' });
-                const units = parseExcelToC(excelBuffer);
+                const { units, subjectName: extractedSubjectName } = parseExcelToC(excelBuffer);
                 console.log(`Found ${units.length} units`);
-                sendUpdate({ type: 'progress', message: `Found ${units.length} units` });
+                console.log(`Extracted Subject Name: ${extractedSubjectName}`);
+                sendUpdate({ type: 'progress', message: `Found ${units.length} units. Subject: ${extractedSubjectName}` });
 
-                // Setup Google Sheet for PPT tracking (if folder and subject provided)
+                // Use extracted subject name, fallback to provided one (though frontend input will be removed)
+                const finalSubjectName = extractedSubjectName || subjectName || "Unknown Subject";
+
+                // Setup Google Sheet for PPT tracking (if folder provided)
                 let trackingSpreadsheetId: string | null = null;
-                if (driveFolderId && subjectName) {
+                if (driveFolderId) {
                     try {
                         sendUpdate({ type: 'progress', message: 'Setting up Google Sheet tracker...' });
-                        console.log('Setting up Google Sheet for subject:', subjectName);
+                        console.log('Setting up Google Sheet for subject:', finalSubjectName);
 
                         // List all files in the folder
                         const filesInFolder = await driveService.listFilesInFolder(driveFolderId);
@@ -105,7 +109,7 @@ export async function POST(request: Request) {
 
                         // Try to find existing sheet with fuzzy matching
                         const matchedSheet = findSimilarSheet(
-                            subjectName,
+                            finalSubjectName,
                             spreadsheets.map(s => ({ id: s.id, name: s.name })),
                             0.75  // 75% similarity threshold
                         );
@@ -119,7 +123,7 @@ export async function POST(request: Request) {
                             });
                         } else {
                             console.log('No similar sheet found, creating new one...');
-                            const sheetTitle = `${subjectName}_PPT_Tracker`;
+                            const sheetTitle = `${finalSubjectName}_PPT_Tracker`;
                             trackingSpreadsheetId = await driveService.createSpreadsheet(sheetTitle, driveFolderId);
 
                             // Add header row to new sheet

@@ -103,7 +103,6 @@ export default function AutomationPanel() {
     const [driveFileId, setDriveFileId] = useState("");
     const [driveFolderId, setDriveFolderId] = useState("");
     const [gammaFolderId, setGammaFolderId] = useState("");
-    const [subjectName, setSubjectName] = useState("");
     const [gammaAdditionalInstructions, setGammaAdditionalInstructions] = useState(DEFAULT_GAMMA_ADDITIONAL_INSTRUCTIONS);
     const [slidesPerUnit, setSlidesPerUnit] = useState(10);
     const [geminiApiKey, setGeminiApiKey] = useState("");
@@ -259,7 +258,6 @@ export default function AutomationPanel() {
                     driveFileId: extractedFileId,
                     driveFolderId: extractedDriveFolderId,
                     gammaFolderId: extractedGammaFolderId,
-                    subjectName,
                     gammaAdditionalInstructions,
                     slidesPerUnit,
                     googleTokens: JSON.parse(googleTokens),
@@ -426,19 +424,7 @@ export default function AutomationPanel() {
                         </div>
                     </div>
 
-                    {/* Subject Name */}
-                    <div className="mb-6">
-                        <Input
-                            label="Subject/Course Name"
-                            name="subjectName"
-                            placeholder="e.g., Economics, Computer Science, Business Management"
-                            value={subjectName}
-                            onChange={(e) => setSubjectName(e.target.value)}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Used to organize PPT links in a Google Sheet. Required for tracking.
-                        </p>
-                    </div>
+
 
                     {/* File IDs */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

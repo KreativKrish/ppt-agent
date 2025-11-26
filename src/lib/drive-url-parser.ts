@@ -14,15 +14,15 @@ export function extractDriveId(urlOrId: string): string {
     const trimmed = urlOrId.trim();
 
     // If it doesn't look like a URL, assume it's already an ID
-    if (!trimmed.includes('drive.google.com') && !trimmed.includes('http')) {
+    if (!trimmed.includes('drive.google.com') && !trimmed.includes('docs.google.com') && !trimmed.includes('http')) {
         return trimmed;
     }
 
     try {
-        // Pattern 1: /file/d/FILE_ID/view or /file/d/FILE_ID
-        const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-        if (fileMatch) {
-            return fileMatch[1];
+        // Pattern 1: Generic /d/FILE_ID (covers /file/d/, /spreadsheets/d/, /presentation/d/, /document/d/)
+        const dMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (dMatch) {
+            return dMatch[1];
         }
 
         // Pattern 2: /folders/FOLDER_ID

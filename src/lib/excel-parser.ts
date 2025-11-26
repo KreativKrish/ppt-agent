@@ -7,7 +7,7 @@ export interface Unit {
     level3Topics: string[];
 }
 
-export function parseExcelToC(buffer: Buffer): Unit[] {
+export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: string } {
     // Read the Excel file
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
@@ -27,6 +27,11 @@ export function parseExcelToC(buffer: Buffer): Unit[] {
     if (data.length < 4) {
         throw new Error('Excel file must have at least 4 rows');
     }
+
+    // Extract Subject Name from Row 1, Column A (merged A-D)
+    // data[0] is the first row, data[0][0] is the first cell
+    const subjectName = data[0]?.[0]?.toString().trim() || "Unknown Subject";
+    console.log(`Extracted Subject Name: ${subjectName}`);
 
     // Find "Unit" column in row 3 (index 2)
     const headerRow = data[2];
@@ -109,5 +114,5 @@ export function parseExcelToC(buffer: Buffer): Unit[] {
         });
     });
 
-    return units;
+    return { units, subjectName };
 }
