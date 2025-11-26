@@ -1,10 +1,21 @@
 import * as XLSX from 'xlsx';
 
+export interface Level2Topic {
+    name: string;
+    level3Topics: string[];
+}
+
+export interface Level1Topic {
+    name: string;
+    level2Topics: Level2Topic[];
+}
+
 export interface Unit {
     unitName: string;
-    level1Topics: string[];
-    level2Topics: string[];
-    level3Topics: string[];
+    level1Topics: string[];  // Keep for backward compatibility
+    level2Topics: string[];  // Keep for backward compatibility
+    level3Topics: string[];  // Keep for backward compatibility
+    hierarchicalTopics: Level1Topic[];  // New: structured hierarchy
 }
 
 export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: string } {
@@ -29,7 +40,6 @@ export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: str
     }
 
     // Extract Subject Name from Row 1, Column A (merged A-D)
-    // data[0] is the first row, data[0][0] is the first cell
     const subjectName = data[0]?.[0]?.toString().trim() || "Unknown Subject";
     console.log(`Extracted Subject Name: ${subjectName}`);
 
@@ -48,11 +58,18 @@ export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: str
     const level2ColumnIndex = 2; // Column C
     const level3ColumnIndex = 3; // Column D
 
-    // Group rows by unit
-    const unitsMap = new Map<string, { level1: string[]; level2: string[]; level3: string[] }>();
+    // Group rows by unit with hierarchy
+    const unitsMap = new Map<string, {
+        level1Flat: string[];
+        level2Flat: string[];
+        level3Flat: string[];
+        hierarchical: Level1Topic[];
+    }>();
 
     // Start from row 4 (index 3)
     let currentUnitName = '';
+    let currentLevel1: Level1Topic | null = null;
+    let currentLevel2: Level2Topic | null = null;
 
     for (let i = 3; i < data.length; i++) {
         const row = data[i];
@@ -74,17 +91,42 @@ export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: str
         if (!level1Content && !level2Content && !level3Content) continue;
 
         if (!unitsMap.has(currentUnitName)) {
-            unitsMap.set(currentUnitName, { level1: [], level2: [], level3: [] });
+            unitsMap.set(currentUnitName, {
+                level1Flat: [],
+                level2Flat: [],
+                level3Flat: [],
+                hierarchical: []
+            });
         }
 
         const unit = unitsMap.get(currentUnitName)!;
 
-        if (level1Content && !unit.level1.includes(level1Content)) {
-            unit.level1.push(level1Content);
+        // Build hierarchical structure
+        if (level1Content) {
+            // New Level-1 topic
+            if (!unit.level1Flat.includes(level1Content)) {
+                unit.level1Flat.push(level1Content);
+            }
+
+            currentLevel1 = {
+                name: level1Content,
+                level2Topics: []
+            };
+            unit.hierarchical.push(currentLevel1);
+            currentLevel2 = null; // Reset Level-2 when new Level-1 starts
         }
 
-        if (level2Content && !unit.level2.includes(level2Content)) {
-            unit.level2.push(level2Content);
+        if (level2Content && currentLevel1) {
+            // New Level-2 topic under current Level-1
+            if (!unit.level2Flat.includes(level2Content)) {
+                unit.level2Flat.push(level2Content);
+            }
+
+            currentLevel2 = {
+                name: level2Content,
+                level3Topics: []
+            };
+            currentLevel1.level2Topics.push(currentLevel2);
         }
 
         // Level-3 topics can have multiple bullet points, parse them
@@ -96,8 +138,13 @@ export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: str
                 .filter((item: string) => item.length > 0);
 
             level3Items.forEach((item: string) => {
-                if (!unit.level3.includes(item)) {
-                    unit.level3.push(item);
+                if (!unit.level3Flat.includes(item)) {
+                    unit.level3Flat.push(item);
+                }
+
+                // Add to current Level-2 if it exists
+                if (currentLevel2 && !currentLevel2.level3Topics.includes(item)) {
+                    currentLevel2.level3Topics.push(item);
                 }
             });
         }
@@ -108,9 +155,10 @@ export function parseExcelToC(buffer: Buffer): { units: Unit[], subjectName: str
     unitsMap.forEach((content, unitName) => {
         units.push({
             unitName,
-            level1Topics: content.level1,
-            level2Topics: content.level2,
-            level3Topics: content.level3,
+            level1Topics: content.level1Flat,
+            level2Topics: content.level2Flat,
+            level3Topics: content.level3Flat,
+            hierarchicalTopics: content.hierarchical
         });
     });
 

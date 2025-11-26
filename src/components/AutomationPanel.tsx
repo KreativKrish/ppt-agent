@@ -50,53 +50,72 @@ const IMAGE_MODEL_OPTIONS = [
     { value: "ideogram-v3-quality", label: "Ideogram v3 Quality" },
 ];
 
-const DEFAULT_PROMPT = `Please create a comprehensive and detailed set of presentation slides for the university course unit titled {unitName}.
-Generate a {slideCount}-slide presentation outline with:
-Unit: {unitName}
-Topics (Level-1): {level1Topics}
-Subtopics (Level-2): {level2Topics}
-SubSubTopics (Level-3): {level3Topics}
+//Generate a {slideCount}-slide presentation outline with:
+// Unit: {unitName}
+// Topics (Level-1): {level1Topics}
+// Subtopics (Level-2): {level2Topics}
+// SubSubTopics (Level-3): {level3Topics}
 
-Sole Source for Topics: Use the provided level-1, level-2, and level-3 topics as the one and only source for this task.
+// Sole Source for Topics: Use the provided level-1, level-2, and level-3 topics as the one and only source for this task.
+
+const DEFAULT_PROMPT = `Please create a comprehensive and detailed set of presentation slides for the university course unit titled {unitName}.
+Generate a {slideCount}-slide presentation outline.
+
+HIERARCHICAL TOPIC STRUCTURE (FOLLOW THIS ORDER STRICTLY):
+{hierarchicalTopics}
+
+
+CRITICAL INSTRUCTIONS FOR TOPIC COVERAGE:
+1. **Follow the Hierarchical Order**: You MUST cover topics in the exact order shown above.
+2. **Complete Each Level-1 Before Moving On**: For each Level-1 topic:
+   - First, cover all its Level-2 subtopics in order
+   - For each Level-2 subtopic, cover all its related Level-3 details
+   - Only after fully completing one Level-1 topic and all its children, move to the next Level-1 topic
+3. **Use the Hierarchical Structure as Your Only Source**: The hierarchical topic structure above is your complete and only source for this task.
+
 Content Generation Instructions:
-• Internal Knowledge: You must generate all detailed content for the slides using your own internal, general knowledge of the subject matter. No Self-Learning Material (SLM) or other external document is provided.
-• Comprehensive Coverage: For each major heading in the TOC (e.g., "3.1," "3.2"), create a series of slides that thoroughly explain all the sub-topics listed under it. Ensure the explanations are accurate and at a university level.
-• Enhancements: It is essential that you enhance the content with relevant examples, clear analogies, simple tables, mathematical formulas, or code snippets to illustrate and clarify complex concepts.
+• **Internal Knowledge**: You must generate all detailed content for the slides using your own internal, general knowledge of the subject matter. No Self-Learning Material (SLM) or other external document is provided.
+• **Comprehensive Coverage**: For each Level-2 subtopic, create slides that thoroughly explain all the Level-3 details listed under it. Ensure the explanations are accurate and at a university level.
+• **Enhancements**: It is essential that you enhance the content with relevant examples, clear analogies, simple tables, mathematical formulas, or code snippets to illustrate and clarify complex concepts.
+
 Structural Requirements:
-1. Slide Distribution: Distribute these slides evenly across the major sections from the {unitName}.    
-2. No Summaries: Do not create a summary slide at the end of each major section (e.g., at the end of 3.1, 3.2, etc.).
+1. **Slide Distribution**: Distribute the {slideCount} slides evenly across all Level-1 topics, ensuring each gets proportional coverage.
+2. **No Summaries**: Do not create a summary slide at the end of each major section.
+3. **Sequential Coverage**: Move through Level-1 → Level-2 → Level-3 in sequential order without jumping between sections.
 
 STRICT FORMATTING REQUIREMENTS (MANDATORY - DO NOT SKIP):
 1. Slide Format: Every slide MUST be formatted EXACTLY as follows:
-   - A heading line with a continuous slide number and a descriptive title (e.g., **Slide 1: [Topic]**).
+   - A heading line with a continuous slide number and a descriptive title (e.g., **Slide 1: [Topic]**)
    - EXACTLY THREE (3) bullet points - THIS IS MANDATORY, NOT OPTIONAL
    - Each bullet point MUST begin with a bolded keyword or phrase, followed by a colon, then explanatory text
-   - The text after the colon must be a single, concise explanatory sentence.
+   - The text after the colon must be a single, concise explanatory sentence
 
 EXAMPLE FORMAT (follow this exactly):
 Slide 1: Introduction to Economic Systems
-**Market Economy**: A system where prices are determined by supply and demand with minimal government intervention.
-**Command Economy**: An economic system where the government controls production, prices, and distribution of goods.
-**Mixed Economy**: A system that combines elements of both market and command economies for balanced growth.
+- **Market Economy**: A system where prices are determined by supply and demand with minimal government intervention.
+- **Command Economy**: An economic system where the government controls production, prices, and distribution of goods.
+- **Mixed Economy**: A system that combines elements of both market and command economies for balanced growth.
 
 ---
 
-2. Separators: Use \n---\n to separate each slide.
-3. No Citations: Absolutely no citations (e.g., ) are allowed in the response.
+2. Separators: Use \\n---\\n to separate each slide.
+3. No Citations: Absolutely no citations are allowed in the response.
 
 IMPORTANT: Each slide MUST have exactly 3 bullet points. Do not create slides with only titles. Every slide needs content.`;
 
-const DEFAULT_GAMMA_ADDITIONAL_INSTRUCTIONS = `1)all title - in heading 2 font size
-2)All conetnt except for Title - Large font size
-3)only below layouts in[  oriantion -vertical column size - Extra Large]
--->solid box (No image)    
---> side box(No image)
--->Bullets list (No image)  
---->hollw box (No image),   
---->Arrows(No image) 
---->two column(left image , text right in bullets )  
-in loop , No other layput
-In all cards keep layput oriantaion -  Vertical -column size - exrta large=25`;
+const DEFAULT_GAMMA_ADDITIONAL_INSTRUCTIONS = `All slide titles should use Heading 2 font size.
+All content except titles should use Large font size.
+
+Use only the following slide layouts, cycling through them in order:
+- Solid box layout (no images)
+- Side box layout (no images)
+- Bullet list layout (no images)
+- Hollow box layout (no images) 
+- Arrows layout (no images)
+- Two column layout (image on left, bullet points on right)
+
+Do not use any other layouts.
+All cards should have vertical orientation with extra large column size.`;
 
 export default function AutomationPanel() {
     const [googleTokens, setGoogleTokens] = useState<string | null>(null);

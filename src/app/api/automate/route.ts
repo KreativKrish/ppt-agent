@@ -170,6 +170,7 @@ export async function POST(request: Request) {
                             unit.level1Topics,
                             unit.level2Topics,
                             unit.level3Topics,
+                            unit.hierarchicalTopics,
                             slidesPerUnit || 10, // Use configurable slide count with fallback
                             apiKey,
                             customPrompt
@@ -405,7 +406,11 @@ export async function POST(request: Request) {
                                 console.log(`Added ${rowsToAppend.length} PPT links to tracking sheet`);
                             } catch (sheetError: any) {
                                 console.error(`Error appending to sheet:`, sheetError.message);
-                                // Don't fail the automation if sheet update fails
+                                // Send warning to user but don't fail the automation
+                                sendUpdate({
+                                    type: 'progress',
+                                    message: `⚠️ Warning: Could not update tracking sheet (${sheetError.message}). Presentations generated successfully.`
+                                });
                             }
                         }
 

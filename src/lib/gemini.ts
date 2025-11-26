@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Level1Topic } from './excel-parser';
 
 export interface OutlineSlide {
     slideNumber: number;
@@ -11,6 +12,7 @@ export async function generateOutline(
     level1Topics: string[],
     level2Topics: string[],
     level3Topics: string[],
+    hierarchicalTopics: Level1Topic[],
     slideCount: number,
     apiKey: string,
     customPrompt: string
@@ -28,24 +30,28 @@ export async function generateOutline(
         // Ensure customPrompt is a string
         const promptTemplate = typeof customPrompt === 'string' ? customPrompt : String(customPrompt);
 
+        // Format hierarchical topics as a structured outline
+        const hierarchicalStructure = formatHierarchicalTopics(hierarchicalTopics);
+
         // Replace placeholders in custom prompt
         const prompt = promptTemplate
             .replace('{unitName}', unitName)
             .replace('{level1Topics}', level1Topics.join(', '))
             .replace('{level2Topics}', level2Topics.join(', '))
             .replace('{level3Topics}', level3Topics.join(', '))
+            .replace('{hierarchicalTopics}', hierarchicalStructure)
             .replace('{slideCount}', slideCount.toString());
 
         // Debug: Log what we're sending to Gemini
-        console.log('\n=== GEMINI PROMPT ===');
-        console.log(`Unit: ${unitName}`);
-        console.log(`Level-1 Topics (${level1Topics.length}): ${level1Topics.join(', ')}`);
-        console.log(`Level-2 Topics (${level2Topics.length}): ${level2Topics.join(', ')}`);
-        console.log(`Level-3 Topics (${level3Topics.length}): ${level3Topics.join(', ')}`);
-        console.log(`Slide Count: ${slideCount}`);
-        console.log('\nFull Prompt:');
-        console.log('---');
-        console.log(prompt);
+        // console.log('\n=== GEMINI PROMPT ===');
+        // console.log(`Unit: ${unitName}`);
+        // console.log(`Level-1 Topics (${level1Topics.length}): ${level1Topics.join(', ')}`);
+        // console.log(`Level-2 Topics (${level2Topics.length}): ${level2Topics.join(', ')}`);
+        // console.log(`Level-3 Topics (${level3Topics.length}): ${level3Topics.join(', ')}`);
+        // console.log(`Slide Count: ${slideCount}`);
+        // console.log('\nFull Prompt:');
+        // console.log('---');
+        // console.log(prompt);
         console.log('---\n');
 
         // Retry logic with exponential backoff
@@ -61,9 +67,9 @@ export async function generateOutline(
                 // Debug: Log Gemini's raw response
                 console.log('\n=== GEMINI RESPONSE ===');
                 console.log(`Response length: ${text.length} characters`);
-                console.log('First 1000 characters:');
-                console.log(text.substring(0, 1000));
-                console.log('...\n');
+                // console.log('First 1000 characters:');
+                // console.log(text.substring(0, 1000));
+                // console.log('...\n');
 
                 // Success! Parse and return
                 console.log(`✅ Success with ${modelName}!`);
@@ -196,4 +202,29 @@ export function convertOutlineToText(slides: OutlineSlide[]): string {
             return `Slide ${slide.slideNumber}: ${slide.title}\n${bullets}`;
         })
         .join('\n\n---\n\n');
+}
+
+function formatHierarchicalTopics(hierarchicalTopics: Level1Topic[]): string {
+    let formatted = '';
+
+    hierarchicalTopics.forEach((level1, index) => {
+        // Level-1 topic
+        formatted += `${index + 1}. ${level1.name}\n`;
+
+        // Level-2 topics under this Level-1
+        level1.level2Topics.forEach((level2, idx) => {
+            formatted += `   ${index + 1}.${idx + 1} ${level2.name}\n`;
+
+            // Level-3 topics under this Level-2
+            if (level2.level3Topics.length > 0) {
+                level2.level3Topics.forEach((level3) => {
+                    formatted += `      • ${level3}\n`;
+                });
+            }
+        });
+
+        formatted += '\n'; // Blank line between Level-1 topics
+    });
+
+    return formatted.trim();
 }
