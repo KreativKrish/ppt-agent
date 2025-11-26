@@ -98,6 +98,21 @@ export default function AutomationPanel() {
         }
     }, [results]);
 
+    // Load tokens from localStorage on mount
+    React.useEffect(() => {
+        const savedTokens = localStorage.getItem('google_drive_tokens');
+        if (savedTokens) {
+            setGoogleTokens(savedTokens);
+        }
+    }, []);
+
+    // Save tokens to localStorage whenever they change
+    React.useEffect(() => {
+        if (googleTokens) {
+            localStorage.setItem('google_drive_tokens', googleTokens);
+        }
+    }, [googleTokens]);
+
     const handleGoogleAuth = async () => {
         setIsAuthenticating(true);
         try {
