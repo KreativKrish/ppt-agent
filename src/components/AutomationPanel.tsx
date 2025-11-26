@@ -442,17 +442,17 @@ export default function AutomationPanel() {
                         </div>
                         <div>
                             <Input
-                                label="Google Drive Folder (Link or ID) - Optional"
+                                label="Google Drive Folder for Gamma links (Link or ID)"
                                 name="driveFolderId"
                                 placeholder="Paste Drive folder link: https://drive.google.com/drive/folders/..."
                                 value={driveFolderId}
                                 onChange={(e) => setDriveFolderId(e.target.value)}
                             />
                             <p className="text-xs text-gray-500 mt-1">
-                                For Google Sheets tracking - paste folder link or ID
+                                For Gamma links tracking - paste folder link or ID
                             </p>
                             <Input
-                                label="Gamma Folder ID (Optional)"
+                                label="Gamma Folder ID"
                                 name="gammaFolderId"
                                 placeholder="e.g. 8a9b0c..."
                                 value={gammaFolderId}
