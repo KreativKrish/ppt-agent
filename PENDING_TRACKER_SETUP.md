@@ -260,3 +260,62 @@ Consider adding:
 | View logs | Vercel Dashboard → Functions → check-pending |
 | Update schedule | Edit `vercel.json` → `crons.schedule` |
 | Add tracking sheet | Update `TRACKING_SHEETS` env var |
+
+---
+
+## Manual Update (Backup Option)
+
+### Purpose
+
+If the cron job fails or you want to manually check pending presentations, use the built-in manual update feature.
+
+### How to Use
+
+1. **Navigate to the app** (`http://localhost:3000` or your deployed URL)
+2. **Authenticate with Google** if not already authenticated
+3. **Scroll to "Check Pending Presentations"** section (at the bottom)
+4. **Enter your tracking spreadsheet**:
+   - Paste the full URL: `https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`
+   - OR just the ID: `SPREADSHEET_ID`
+5. **Click "Check Pending Status"**
+6. **View results**:
+   - Shows how many were checked
+   - Displays updated presentations
+   - Provides direct links to completed presentations
+
+### API Endpoint
+
+You can also call the API directly:
+
+```bash
+curl -X POST http://localhost:3000/api/update-pending \
+  -H "Content-Type: application/json" \
+  -d '{
+    "spreadsheetId": "YOUR_SPREADSHEET_ID",
+    "googleTokens": {...}
+  }'
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Checked 3 pending presentations, updated 2",
+  "totalChecked": 3,
+  "updated": 2,
+  "updates": [
+    {
+      "name": "Unit-2_Part-1",
+      "status": "✅ Complete",
+      "url": "https://gamma.app/..."
+    }
+  ]
+}
+```
+
+### When to Use Manual Update
+
+- ✅ Cron job hasn't run yet (10-minute interval)
+- ✅ Want immediate results instead of waiting
+- ✅ Troubleshooting cron job issues
+- ✅ One-time check for a specific sheet

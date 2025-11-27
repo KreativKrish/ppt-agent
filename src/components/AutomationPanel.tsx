@@ -5,6 +5,7 @@ import { Input, TextArea, Select } from "./ParamGroup";
 import { Loader2, CheckCircle, XCircle, ExternalLink, ArrowLeft } from "lucide-react";
 import { extractDriveId } from "@/lib/drive-url-parser";
 import ManualGenerationPanel from "./ManualGenerationPanel";
+import ManualUpdatePanel from "./ManualUpdatePanel";
 
 interface AutomationResult {
     unit: string;
@@ -851,6 +852,9 @@ export default function AutomationPanel() {
                             </div>
                         </div>
                     )}
+
+                    {/* Manual Update Panel */}
+                    <ManualUpdatePanel googleTokens={googleTokens} />
                 </div>
             )}
         </div>
