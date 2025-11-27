@@ -9,6 +9,7 @@ export async function POST(request: Request) {
     const stream = new ReadableStream({
         async start(controller) {
             let isClosed = false;
+            let isAborted = false;
 
             const sendUpdate = (data: any) => {
                 if (!isClosed) {
@@ -32,7 +33,19 @@ export async function POST(request: Request) {
                 }
             };
 
+            // Listen for abort signal
+            request.signal.addEventListener('abort', () => {
+                console.log('⚠️ Client aborted request - stopping automation');
+                isAborted = true;
+                sendUpdate({ type: 'warning', message: 'Automation stopped by user' });
+                closeStream();
+            });
+
             try {
+                // Track API execution time to prevent Vercel timeout
+                const apiStartTime = Date.now();
+                const MAX_API_DURATION = 240000; // 240 seconds (4 min safety buffer before 300s limit)
+
                 const body = await request.json();
                 const {
                     driveFileId,
@@ -64,9 +77,26 @@ export async function POST(request: Request) {
                 }
 
                 // Set Google Drive tokens
-                if (googleTokens) {
-                    driveService.setTokens(googleTokens);
+                if (!googleTokens) {
+                    sendUpdate({
+                        type: 'error',
+                        message: 'Google authentication required. Please sign in with Google first.'
+                    });
+                    closeStream();
+                    return;
                 }
+
+                // Validate that tokens include refresh_token
+                if (!googleTokens.refresh_token) {
+                    sendUpdate({
+                        type: 'error',
+                        message: 'Google tokens are invalid or expired. Please disconnect and re-authenticate with Google Drive.'
+                    });
+                    closeStream();
+                    return;
+                }
+
+                driveService.setTokens(googleTokens);
 
                 console.log('Starting automation...');
                 sendUpdate({ type: 'progress', message: 'Starting automation...' });
@@ -78,6 +108,7 @@ export async function POST(request: Request) {
                 const excelBuffer = await driveService.fetchFileFromDrive(driveFileId);
                 console.log('Excel file fetched successfully');
                 sendUpdate({ type: 'progress', message: 'Excel file fetched successfully' });
+
 
                 // Step 2: Parse Excel
                 console.log('Parsing Excel ToC...');
@@ -126,9 +157,9 @@ export async function POST(request: Request) {
                             const sheetTitle = `${finalSubjectName}_PPT_Tracker`;
                             trackingSpreadsheetId = await driveService.createSpreadsheet(sheetTitle, driveFolderId);
 
-                            // Add header row to new sheet
+                            // Add header row to new sheet with enhanced tracking
                             await driveService.appendRowsToSheet(trackingSpreadsheetId, [
-                                ['PPT Name', 'Gamma URL']
+                                ['PPT Name', 'Status', 'Gamma URL', 'Generation ID', 'Last Updated']
                             ]);
 
                             sendUpdate({
@@ -150,8 +181,29 @@ export async function POST(request: Request) {
 
                 // Process units sequentially
                 for (let i = 0; i < units.length; i++) {
+                    // Check if request was aborted
+                    if (isAborted) {
+                        console.log('Stopping unit processing due to abort');
+                        break;
+                    }
+
+                    // Check if we're approaching API timeout limit
+                    if (Date.now() - apiStartTime > MAX_API_DURATION) {
+                        sendUpdate({
+                            type: 'warning',
+                            message: 'API timeout approaching. Stopping new units to prevent timeout. Partial results have been saved.'
+                        });
+                        break; // Exit unit loop gracefully
+                    }
+
                     const unit = units[i];
                     sendUpdate({ type: 'progress', message: `Processing ${unit.unitName} (${i + 1}/${units.length})...` });
+
+                    // Check abort before processing unit
+                    if (isAborted) {
+                        console.log('Stopping before processing unit due to abort');
+                        break;
+                    }
 
                     try {
                         // 1. Generate Outline with Gemini
@@ -187,6 +239,12 @@ export async function POST(request: Request) {
                             });
                         } else {
                             console.warn('⚠️ WARNING: No slides generated! Check Gemini API model and response.');
+                        }
+
+                        // Check abort before chunking
+                        if (isAborted) {
+                            console.log('Stopping before chunking due to abort');
+                            throw new Error('Aborted by user');
                         }
 
                         // 2. Split into chunks of 60
@@ -285,10 +343,24 @@ export async function POST(request: Request) {
                             let pptDownloadUrl = '';
                             let status = 'processing';
 
-                            const maxPolls = 300; // 300 polls * 3s = ~15 minutes (Gamma can be slow)
+                            const maxPolls = 20; // 20 polls * 3s = ~60 seconds (reduced from 15 min to prevent timeout)
                             const pollInterval = 3000;
 
                             for (let k = 0; k < maxPolls; k++) {
+                                // Check abort during polling
+                                if (isAborted) {
+                                    console.log('Stopping Gamma polling due to abort');
+                                    break;
+                                }
+                                // Check API timeout during polling
+                                if (Date.now() - apiStartTime > MAX_API_DURATION) {
+                                    sendUpdate({
+                                        type: 'warning',
+                                        message: `Timeout: Generation ${generationId} still pending after ${maxPolls * pollInterval / 1000}s. Moving to next chunk.`
+                                    });
+                                    break; // Exit poll loop
+                                }
+
                                 await new Promise(resolve => setTimeout(resolve, pollInterval));
 
                                 // Send progress update every 30 seconds
@@ -358,11 +430,43 @@ export async function POST(request: Request) {
 
                             if (status !== 'done') {
                                 const minutesWaited = Math.floor((maxPolls * pollInterval) / 60000);
-                                throw new Error(
-                                    `Gamma generation timed out after ${minutesWaited} minutes. ` +
-                                    `The presentation may still be generating in Gamma. ` +
-                                    `Try checking your Gamma account for the presentation.`
-                                );
+
+                                // Instead of throwing error, send pending status and continue
+                                sendUpdate({
+                                    type: 'part_pending',
+                                    unit: unit.unitName,
+                                    part: {
+                                        generationId: generationId,
+                                        partName: partName,
+                                        status: 'pending',
+                                        message: `Gamma generation still processing after ${minutesWaited} minute(s). Check your Gamma account or poll status separately.`
+                                    }
+                                });
+
+                                // Add pending presentation to sheet for tracking
+                                if (trackingSpreadsheetId) {
+                                    try {
+                                        await driveService.appendRowsToSheet(trackingSpreadsheetId, [[
+                                            partName,
+                                            '⏳ Pending',
+                                            '-',
+                                            generationId,
+                                            new Date().toISOString()
+                                        ]]);
+                                        console.log(`Added pending generation to tracking sheet: ${generationId}`);
+                                    } catch (sheetErr: any) {
+                                        console.error('Error adding pending to sheet:', sheetErr.message);
+                                    }
+                                }
+
+                                // Continue to next chunk instead of failing entire process
+                                continue;
+                            }
+
+                            // If aborted during polling, break from chunk loop
+                            if (isAborted) {
+                                console.log('Breaking from chunk loop due to abort');
+                                break;
                             }
 
                             console.log(`Presentation URL: ${presentationUrl}`);
@@ -397,13 +501,18 @@ export async function POST(request: Request) {
                         // Append to Google Sheet if tracking is enabled
                         if (trackingSpreadsheetId && chunkUrls.length > 0) {
                             try {
-                                const rowsToAppend = chunkUrls.map(part => [
-                                    part.partName,
-                                    part.gammaUrl
-                                ]);
+                                const rowsToAppend = chunkUrls
+                                    .filter(part => part.gammaUrl) // Only completed ones
+                                    .map(part => [
+                                        part.partName,
+                                        '✅ Complete',
+                                        part.gammaUrl,
+                                        '-',
+                                        new Date().toISOString()
+                                    ]);
 
                                 await driveService.appendRowsToSheet(trackingSpreadsheetId, rowsToAppend);
-                                console.log(`Added ${rowsToAppend.length} PPT links to tracking sheet`);
+                                console.log(`Added ${rowsToAppend.length} completed PPT links to tracking sheet`);
                             } catch (sheetError: any) {
                                 console.error(`Error appending to sheet:`, sheetError.message);
                                 // Send warning to user but don't fail the automation

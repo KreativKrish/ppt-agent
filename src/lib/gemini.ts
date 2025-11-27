@@ -54,8 +54,8 @@ export async function generateOutline(
         // console.log(prompt);
         console.log('---\n');
 
-        // Retry logic with exponential backoff
-        const maxRetries = 3;
+        // Retry logic with faster backoff to prevent timeouts
+        const maxRetries = 2; // Reduced from 3 to minimize timeout risk
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 console.log(`Attempt ${attempt}/${maxRetries} with ${modelName}...`);
@@ -84,8 +84,8 @@ export async function generateOutline(
                     console.warn(`⚠️ ${modelName} is ${isOverloaded ? 'overloaded' : 'rate limited'} (attempt ${attempt}/${maxRetries})`);
 
                     if (attempt < maxRetries) {
-                        // Exponential backoff: 2s, 4s, 8s
-                        const delayMs = Math.pow(2, attempt) * 1000;
+                        // Faster linear backoff: 1s, 2s (reduced from exponential 2s, 4s, 8s)
+                        const delayMs = attempt * 1000;
                         console.log(`Waiting ${delayMs / 1000}s before retry...`);
                         await new Promise(resolve => setTimeout(resolve, delayMs));
                     } else {

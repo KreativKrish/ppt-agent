@@ -1,0 +1,17 @@
+{
+    "buildCommand": "npm run build",
+    "devCommand": "npm run dev",
+    "installCommand": "npm install",
+    "framework": "nextjs",
+    "functions": {
+        "src/app/api/**/*.ts": {
+            "maxDuration": 60
+        }
+    },
+    "crons": [
+        {
+            "path": "/api/cron/check-pending",
+            "schedule": "*/10 * * * *"
+        }
+    ]
+}

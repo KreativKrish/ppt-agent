@@ -22,6 +22,7 @@ export class GoogleDriveService {
         return this.oauth2Client.generateAuthUrl({
             access_type: 'offline',
             scope: SCOPES,
+            prompt: 'consent', // Force consent screen to always get refresh token
         });
     }
 
@@ -199,6 +200,57 @@ export class GoogleDriveService {
         } catch (error: any) {
             console.error('Error getting sheet data:', error.message);
             throw new Error(`Failed to get sheet data: ${error.message}`);
+        }
+    }
+
+    async getSheetRows(spreadsheetId: string): Promise<string[][]> {
+        const sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+
+        try {
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: 'PPT Links!A2:E', // Skip header, get all data columns
+            });
+
+            return (response.data.values || []) as string[][];
+        } catch (error: any) {
+            console.error('Error getting sheet rows:', error.message);
+            throw new Error(`Failed to get sheet rows: ${error.message}`);
+        }
+    }
+
+    async updateSheetRows(spreadsheetId: string, updates: Array<{
+        rowIndex: number;
+        pptName: string;
+        status: string;
+        url: string;
+        timestamp: string;
+    }>): Promise<void> {
+        const sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+
+        try {
+            for (const update of updates) {
+                const range = `PPT Links!A${update.rowIndex}:E${update.rowIndex}`;
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range,
+                    valueInputOption: 'RAW',
+                    requestBody: {
+                        values: [[
+                            update.pptName,
+                            update.status,
+                            update.url,
+                            '-', // Clear generation ID
+                            update.timestamp
+                        ]]
+                    }
+                });
+            }
+
+            console.log(`Updated ${updates.length} rows in spreadsheet ${spreadsheetId}`);
+        } catch (error: any) {
+            console.error('Error updating sheet rows:', error.message);
+            throw new Error(`Failed to update sheet rows: ${error.message}`);
         }
     }
 }

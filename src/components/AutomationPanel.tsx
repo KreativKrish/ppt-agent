@@ -141,6 +141,7 @@ export default function AutomationPanel() {
     const [error, setError] = useState("");
     const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
     const [currentView, setCurrentView] = useState<"automation" | "manual">("automation");
+    const [abortController, setAbortController] = useState<AbortController | null>(null);
 
     // Load results from localStorage on mount
     React.useEffect(() => {
@@ -262,6 +263,10 @@ export default function AutomationPanel() {
         setResults([]);
         setProgress("Starting automation...");
 
+        // Create abort controller for canceling
+        const controller = new AbortController();
+        setAbortController(controller);
+
         try {
             // Extract IDs from URLs automatically
             const extractedFileId = extractDriveId(driveFileId);
@@ -286,6 +291,7 @@ export default function AutomationPanel() {
                     imageModel,
                     themeId: selectedThemeId,
                 }),
+                signal: controller.signal, // Add abort signal
             });
 
             if (!response.ok || !response.body) {
@@ -364,9 +370,22 @@ export default function AutomationPanel() {
             }
 
         } catch (err: any) {
-            setError(err.message);
+            if (err.name === 'AbortError') {
+                setProgress('Automation stopped by user');
+                setError('');
+            } else {
+                setError(err.message);
+            }
         } finally {
             setIsRunning(false);
+            setAbortController(null);
+        }
+    };
+
+    const stopAutomation = () => {
+        if (abortController) {
+            abortController.abort();
+            setProgress('Stopping automation...');
         }
     };
 
@@ -438,7 +457,19 @@ export default function AutomationPanel() {
                                 )}
                             </button>
                             {googleTokens && (
-                                <span className="text-sm text-green-600">✓ Ready to access Drive</span>
+                                <>
+                                    <span className="text-sm text-green-600">✓ Ready to access Drive</span>
+                                    <button
+                                        onClick={() => {
+                                            setGoogleTokens(null);
+                                            localStorage.removeItem('google_drive_tokens');
+                                            setProgress('Disconnected from Google Drive. Please re-authenticate.');
+                                        }}
+                                        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                    >
+                                        Disconnect
+                                    </button>
+                                </>
                             )}
                         </div>
                     </div>
@@ -449,7 +480,7 @@ export default function AutomationPanel() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div>
                             <Input
-                                label="Excel ToC File (Link or ID)"
+                                label="Source - Excel ToC File link"
                                 name="driveFileId"
                                 placeholder="Paste Drive link or ID: https://drive.google.com/file/d/..."
                                 value={driveFileId}
@@ -461,7 +492,7 @@ export default function AutomationPanel() {
                         </div>
                         <div>
                             <Input
-                                label="Google Drive Folder for Gamma links (Link or ID)"
+                                label="Destination - Google Drive Folder link for Gamma links"
                                 name="driveFolderId"
                                 placeholder="Paste Drive folder link: https://drive.google.com/drive/folders/..."
                                 value={driveFolderId}
@@ -708,21 +739,32 @@ export default function AutomationPanel() {
                         </div>
                     )}
 
-                    {/* Start Button */}
-                    <button
-                        onClick={startAutomation}
-                        disabled={isRunning || !googleTokens}
-                        className="w-full px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-base"
-                    >
-                        {isRunning ? (
-                            <>
-                                <Loader2 className="animate-spin inline mr-2 h-5 w-5" />
-                                Processing...
-                            </>
-                        ) : (
-                            "Start Automation"
+                    {/* Start/Stop Buttons */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={startAutomation}
+                            disabled={isRunning || !googleTokens}
+                            className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-base"
+                        >
+                            {isRunning ? (
+                                <>
+                                    <Loader2 className="animate-spin inline mr-2 h-5 w-5" />
+                                    Processing...
+                                </>
+                            ) : (
+                                "Start Automation"
+                            )}
+                        </button>
+                        {isRunning && (
+                            <button
+                                onClick={stopAutomation}
+                                className="px-6 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium text-base"
+                            >
+                                <XCircle className="inline mr-2 h-5 w-5" />
+                                Stop
+                            </button>
                         )}
-                    </button>
+                    </div>
 
                     {/* Progress */}
                     {progress && (
